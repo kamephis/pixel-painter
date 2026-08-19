@@ -1,0 +1,2895 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelWerk – Pixel-Art-Editor</title>
+<style>
+:root{
+  --bg:#17181c; --panel:#22242b; --panel2:#2a2d36; --panel3:#31353f;
+  --border:#3a3f4d; --text:#d9dce3; --muted:#8b90a0; --accent:#4f8cff;
+  --accent-dim:#33507e; --warn:#ffb64f; --danger:#ff5f56;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%; overflow:hidden;}
+body{
+  background:var(--bg); color:var(--text);
+  font:13px/1.45 "Segoe UI", "Noto Sans", system-ui, sans-serif;
+  display:grid;
+  grid-template-rows:auto auto 1fr auto auto;
+  user-select:none;
+}
+button{
+  background:var(--panel2); color:var(--text); border:1px solid var(--border);
+  border-radius:4px; padding:4px 9px; cursor:pointer; font:inherit;
+}
+button:hover{background:var(--panel3);}
+button:active{background:var(--accent-dim);}
+button.toggled{background:var(--accent-dim); border-color:var(--accent); color:#fff;}
+button:disabled{opacity:.4; cursor:default;}
+input[type=text],input[type=number],select{
+  background:var(--bg); color:var(--text); border:1px solid var(--border);
+  border-radius:4px; padding:3px 6px; font:inherit;
+}
+input[type=number]{width:64px;}
+input[type=range]{accent-color:var(--accent);}
+input:focus,select:focus,button:focus-visible{outline:1px solid var(--accent); outline-offset:0;}
+label{color:var(--muted);}
+hr.vsep{border:none; border-left:1px solid var(--border); height:22px; margin:0 4px;}
+
+/* ---------- Topbar ---------- */
+#topbar{
+  display:flex; align-items:center; gap:6px; padding:6px 8px;
+  background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;
+}
+#logo{font-weight:700; letter-spacing:.5px; margin-right:6px; color:#fff;}
+#logo span{color:var(--accent);}
+.tb-group{display:flex; align-items:center; gap:4px;}
+#lblZoom{min-width:52px; text-align:center; color:var(--muted);}
+
+/* ---------- Tool options bar ---------- */
+#toolOptions{
+  display:flex; align-items:center; gap:10px; padding:4px 10px; min-height:32px;
+  background:var(--panel2); border-bottom:1px solid var(--border); flex-wrap:wrap;
+}
+#toolOptions .opt{display:flex; align-items:center; gap:5px;}
+#toolOptions .optlabel{color:var(--muted);}
+#stampChip{display:flex; align-items:center; gap:6px;}
+#stampChip canvas{
+  image-rendering:pixelated; background:
+    repeating-conic-gradient(#555 0% 25%, #777 0% 50%) 0 0/10px 10px;
+  border:1px solid var(--border); border-radius:3px;
+}
+
+/* ---------- Main area ---------- */
+#main{
+  display:grid; grid-template-columns:56px 1fr 300px; overflow:hidden; min-height:0;
+}
+#toolcol{
+  background:var(--panel); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0;
+  overflow-y:auto;
+}
+#toolcol button.tool{
+  width:40px; height:38px; display:flex; align-items:center; justify-content:center;
+  padding:0;
+}
+#toolcol button.tool svg{width:22px; height:22px;}
+#toolcol .colorchips{margin-top:auto; position:relative; width:40px; height:40px;}
+#fgSwatch,#bgSwatch{
+  position:absolute; width:26px; height:26px; border:2px solid #fff; border-radius:4px;
+  cursor:pointer; box-shadow:0 0 0 1px #000;
+}
+#fgSwatch{left:0; top:0; z-index:2;}
+#bgSwatch{right:0; bottom:0; z-index:1;}
+#btnSwapColors{margin-top:6px; width:40px; padding:2px 0; font-size:11px;}
+
+/* ---------- Canvas center ---------- */
+#center{
+  display:grid; grid-template-rows:22px 1fr; grid-template-columns:22px 1fr;
+  min-width:0; min-height:0; background:var(--bg);
+}
+#center.no-rulers{grid-template-rows:0 1fr; grid-template-columns:0 1fr;}
+#rulerCorner{background:var(--panel); border-right:1px solid var(--border); border-bottom:1px solid var(--border);}
+#rulerTop,#rulerLeft{display:block; background:var(--panel); width:100%; height:100%; min-width:0; min-height:0;}
+#rulerTop{border-bottom:1px solid var(--border); cursor:s-resize;}
+#rulerLeft{border-right:1px solid var(--border); cursor:e-resize;}
+#viewport{position:relative; overflow:hidden; min-width:0; min-height:0;}
+#mainCanvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none;}
+
+/* ---------- Right sidebar ---------- */
+#sidebar{
+  background:var(--panel); border-left:1px solid var(--border);
+  overflow-y:auto; display:flex; flex-direction:column; min-height:0;
+}
+#sidebar details{border-bottom:1px solid var(--border);}
+#sidebar summary{
+  padding:7px 10px; font-weight:600; cursor:pointer; background:var(--panel2);
+  list-style:none;
+}
+#sidebar summary::before{content:"▾ "; color:var(--muted);}
+#sidebar details:not([open]) summary::before{content:"▸ ";}
+.panelbody{padding:8px 10px; display:flex; flex-direction:column; gap:8px;}
+.btnrow{display:flex; gap:4px; flex-wrap:wrap;}
+.btnrow button{padding:3px 7px; font-size:12px;}
+
+/* Colors */
+#colorInputs{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+#inpHex{width:76px;}
+#inpColorNative{width:34px; height:26px; padding:0; border:1px solid var(--border); background:none; cursor:pointer;}
+#palGrid{display:flex; flex-wrap:wrap; gap:3px;}
+#palGrid .swatch{
+  width:20px; height:20px; border:1px solid #000; border-radius:3px; cursor:pointer;
+  background-image:repeating-conic-gradient(#555 0% 25%, #888 0% 50%);
+  background-size:10px 10px;
+}
+#palGrid .swatch .inner{display:block; width:100%; height:100%;}
+#palGrid .swatch.active{outline:2px solid var(--accent);}
+
+/* Layers */
+#layerList{display:flex; flex-direction:column; gap:2px;}
+.layerrow{
+  display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px;
+  background:var(--panel2); border:1px solid transparent; cursor:pointer;
+}
+.layerrow.active{border-color:var(--accent); background:var(--accent-dim);}
+.layerrow .lname{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.layerrow .icon{cursor:pointer; width:20px; text-align:center; color:var(--muted);}
+.layerrow .icon.on{color:var(--text);}
+.layerrow input[type=range]{width:56px;}
+.layerrow canvas{image-rendering:pixelated; border:1px solid var(--border); background:
+  repeating-conic-gradient(#555 0% 25%, #777 0% 50%) 0 0/8px 8px;}
+
+/* Assets / brushes */
+#assetList{display:flex; flex-direction:column; gap:10px;}
+.assetcard{background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:6px; display:flex; flex-direction:column; gap:6px;}
+.assetcard .ahead{display:flex; align-items:center; gap:6px;}
+.assetcard .ahead .aname{flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.assetcard .asettings{display:flex; flex-wrap:wrap; gap:4px; align-items:center; font-size:12px;}
+.assetcard .asettings input[type=number]{width:48px; padding:2px 4px;}
+.assetcard .aviewwrap{overflow:auto; max-height:260px; border:1px solid var(--border); background:
+  repeating-conic-gradient(#3a3a3a 0% 25%, #4a4a4a 0% 50%) 0 0/12px 12px;}
+.assetcard canvas.aview{display:block; image-rendering:pixelated; cursor:crosshair;}
+.assetcard .amode button{font-size:11px; padding:2px 6px;}
+
+/* ---------- Timeline ---------- */
+#timeline{
+  display:flex; align-items:center; gap:8px; padding:6px 10px;
+  background:var(--panel); border-top:1px solid var(--border);
+}
+#timeline .tl-controls{display:flex; align-items:center; gap:4px; flex-wrap:wrap;}
+#framesStrip{
+  display:flex; gap:6px; overflow-x:auto; flex:1; padding:2px;
+}
+.framecell{
+  display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;
+  padding:3px; border:1px solid var(--border); border-radius:4px; background:var(--panel2);
+  flex:0 0 auto;
+}
+.framecell.active{border-color:var(--accent); background:var(--accent-dim);}
+.framecell canvas{image-rendering:pixelated; background:
+  repeating-conic-gradient(#555 0% 25%, #777 0% 50%) 0 0/8px 8px;}
+.framecell .fnum{font-size:11px; color:var(--muted);}
+#inpFrameDur{width:58px;}
+
+/* ---------- Statusbar ---------- */
+#statusbar{
+  display:flex; align-items:center; gap:16px; padding:3px 10px; font-size:12px;
+  background:var(--panel); border-top:1px solid var(--border); color:var(--muted);
+  white-space:nowrap; overflow:hidden;
+}
+#stHint{overflow:hidden; text-overflow:ellipsis;}
+
+/* ---------- Dialogs ---------- */
+dialog{
+  background:var(--panel); color:var(--text); border:1px solid var(--border);
+  border-radius:8px; padding:0; min-width:360px; max-width:640px;
+}
+dialog::backdrop{background:rgba(0,0,0,.55);}
+dialog .dhead{padding:10px 14px; font-weight:700; border-bottom:1px solid var(--border); background:var(--panel2);}
+dialog .dbody{padding:14px; display:flex; flex-direction:column; gap:10px; max-height:70vh; overflow-y:auto;}
+dialog .dfoot{padding:10px 14px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px;}
+dialog .formrow{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+dialog .formrow label:first-child{min-width:110px;}
+dialog kbd{
+  background:var(--bg); border:1px solid var(--border); border-bottom-width:2px;
+  border-radius:3px; padding:0 5px; font:11px monospace;
+}
+#dlgHelp .dbody{font-size:12.5px;}
+#dlgHelp table{border-collapse:collapse; width:100%;}
+#dlgHelp td{padding:2px 8px 2px 0; vertical-align:top;}
+#dlgHelp h4{margin:8px 0 4px; color:var(--accent);}
+.hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<!-- ======================= TOPBAR ======================= -->
+<div id="topbar">
+  <span id="logo">Pixel<span>Werk</span></span>
+  <div class="tb-group">
+    <button id="btnNew" title="Neues Dokument (Vorlagen oder eigene Größe)">Neu</button>
+    <button id="btnOpenProj" title="Projekt (.pixelwerk.json) öffnen – mit allen Ebenen">Öffnen</button>
+    <button id="btnSaveProj" title="Projekt mit Ebenen, Frames &amp; Brushes speichern (JSON)">Speichern</button>
+    <button id="btnImport" title="PNG importieren: als Brush-Spritesheet, Ebene oder neues Dokument">Import</button>
+    <button id="btnExportPng" title="Als PNG exportieren (Frame oder Spritesheet)">Export PNG</button>
+  </div>
+  <hr class="vsep">
+  <div class="tb-group">
+    <button id="btnUndo" title="Rückgängig (Strg+Z)">↶</button>
+    <button id="btnRedo" title="Wiederholen (Strg+Y)">↷</button>
+    <button id="btnResize" title="Leinwandgröße ändern">Leinwand…</button>
+  </div>
+  <hr class="vsep">
+  <div class="tb-group">
+    <label>Kachel</label>
+    <input type="number" id="inpTileW" min="1" max="512" value="16" title="Kachelbreite (Raster &amp; Snap)">
+    <span>×</span>
+    <input type="number" id="inpTileH" min="1" max="512" value="16" title="Kachelhöhe (Raster &amp; Snap)">
+  </div>
+  <hr class="vsep">
+  <div class="tb-group">
+    <button id="tgPixelGrid" title="Pixelraster anzeigen (ab Zoom 800 %)">Pixelraster</button>
+    <button id="tgTileGrid" title="Kachelraster anzeigen">Kachelraster</button>
+    <button id="tgSnap" title="Am Kachelraster einrasten (Stempel, Auswahl, Verschieben, Hilfslinien)">Snap</button>
+    <button id="tgRulers" title="Lineale anzeigen">Lineale</button>
+    <button id="tgGuides" title="Hilfslinien anzeigen (aus den Linealen ziehen)">Hilfslinien</button>
+    <button id="btnClearGuides" title="Alle Hilfslinien entfernen">✕ Hilfslinien</button>
+  </div>
+  <hr class="vsep">
+  <div class="tb-group">
+    <button id="btnZoomOut" title="Herauszoomen (-)">−</button>
+    <span id="lblZoom">800 %</span>
+    <button id="btnZoomIn" title="Hineinzoomen (+)">+</button>
+    <button id="btnZoomFit" title="Ansicht einpassen (0)">Einpassen</button>
+  </div>
+  <hr class="vsep">
+  <button id="btnHelp" title="Hilfe &amp; Tastaturkürzel (?)">?</button>
+</div>
+
+<!-- ======================= TOOL OPTIONS ======================= -->
+<div id="toolOptions"></div>
+
+<!-- ======================= MAIN ======================= -->
+<div id="main">
+  <div id="toolcol">
+    <button class="tool" data-tool="pencil" title="Stift (B)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L15.5 5.5a2.12 2.12 0 0 1 3 3L8 19l-4 1z"/><path d="M13.5 7.5l3 3"/></svg>
+    </button>
+    <button class="tool" data-tool="eraser" title="Radierer (E)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15l7-7 6 6-4.5 4.5H9L4 15z"/><path d="M11 8l6 6"/><path d="M3 20h18"/></svg>
+    </button>
+    <button class="tool" data-tool="fill" title="Füllen (G)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5L12 5.5l6.5 6.5-5 5a3.2 3.2 0 0 1-4.6 0L5 12.5z"/><path d="M12 5.5L9.5 3"/><path d="M20.5 15.5c.9 1.3 1.5 2.3 1.5 3.1a1.7 1.7 0 1 1-3.4 0c0-.8.9-1.8 1.9-3.1z"/></svg>
+    </button>
+    <button class="tool" data-tool="eyedropper" title="Pipette (I) – auch mit Alt+Klick">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4 7.5-7.5 3 3L8 19l-4 1z"/><path d="M14 6l1.5-1.5a2.12 2.12 0 0 1 3 3L17 9"/><path d="M12.5 6.5l5 5"/></svg>
+    </button>
+    <button class="tool" data-tool="line" title="Linie (L)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 20L20 4"/></svg>
+    </button>
+    <button class="tool" data-tool="rect" title="Rechteck (U)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>
+    </button>
+    <button class="tool" data-tool="ellipse" title="Ellipse (O)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg>
+    </button>
+    <button class="tool" data-tool="select" title="Rechteck-Auswahl (M)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 3"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>
+    </button>
+    <button class="tool" data-tool="move" title="Verschieben (V) – Auswahl oder ganze Ebene">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg>
+    </button>
+    <button class="tool" data-tool="stamp" title="Stempel / Sprite-Brush (S) – Kachel im Brush-Panel wählen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4h5l-1 6h3.5a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2h3.5l-1-6z"/><path d="M5 20h14"/></svg>
+    </button>
+    <button class="tool" data-tool="hand" title="Hand / Ansicht verschieben (H, Leertaste oder mittlere Maustaste)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 11.5V6a1.4 1.4 0 0 1 2.8 0v5M11.3 11V4.6a1.4 1.4 0 0 1 2.8 0V11M14.1 11.2V6.4a1.4 1.4 0 0 1 2.8 0v6.8c0 3.9-2.4 6.8-5.8 6.8-2.8 0-4.2-1.4-6-4.7l-1.4-2.6c-.5-1 .8-2 1.7-1.3l2.7 2.1"/></svg>
+    </button>
+    <div class="colorchips" title="Vordergrund-/Hintergrundfarbe (X = tauschen)">
+      <div id="fgSwatch"></div>
+      <div id="bgSwatch"></div>
+    </div>
+    <button id="btnSwapColors" title="Farben tauschen (X)">⇄</button>
+  </div>
+
+  <div id="center">
+    <canvas id="rulerCorner" width="22" height="22"></canvas>
+    <canvas id="rulerTop"></canvas>
+    <canvas id="rulerLeft"></canvas>
+    <div id="viewport">
+      <canvas id="mainCanvas"></canvas>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <details open>
+      <summary>Farben</summary>
+      <div class="panelbody">
+        <div id="colorInputs">
+          <input type="color" id="inpColorNative" value="#000000" title="Farbwähler">
+          <input type="text" id="inpHex" value="#000000" maxlength="7" title="Hex-Wert">
+          <label>Alpha</label>
+          <input type="range" id="inpAlpha" min="0" max="255" value="255" style="width:80px">
+          <span id="lblAlpha">100 %</span>
+        </div>
+        <div class="btnrow">
+          <select id="selPalette" title="Farbpalette">
+            <option value="db32">DawnBringer 32</option>
+            <option value="pico8">PICO-8</option>
+            <option value="custom">Eigene Palette</option>
+          </select>
+          <button id="btnAddSwatch" title="Aktuelle Farbe zur Palette hinzufügen">+ Farbe</button>
+          <button id="btnPalFromImage" title="Palette aus dem aktuellen Bild erzeugen">Aus Bild</button>
+        </div>
+        <div id="palGrid" title="Klick: Vordergrund · Rechtsklick: Hintergrund · Alt+Klick: entfernen"></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Ebenen</summary>
+      <div class="panelbody">
+        <div class="btnrow">
+          <button id="btnLayerAdd" title="Neue Ebene über der aktiven">+ Neu</button>
+          <button id="btnLayerDup" title="Ebene duplizieren">Dupl.</button>
+          <button id="btnLayerMerge" title="Mit darunterliegender Ebene vereinen">Vereinen ↓</button>
+          <button id="btnLayerUp" title="Ebene nach oben">▲</button>
+          <button id="btnLayerDown" title="Ebene nach unten">▼</button>
+          <button id="btnLayerDel" title="Ebene löschen">🗑</button>
+          <button id="btnLayerImportPng" title="PNG-Datei als neue Ebene importieren">PNG→Ebene</button>
+        </div>
+        <div id="layerList"></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Brushes / Spritesheets</summary>
+      <div class="panelbody">
+        <div class="btnrow">
+          <button id="btnAssetAdd" title="Spritesheet(s) laden – z. B. RPG-Maker-Tilesets oder eigene Sprites">+ Spritesheet laden</button>
+        </div>
+        <div style="color:var(--muted); font-size:12px;">
+          Kachel anklicken oder Bereich aufziehen → wird zum Stempel-Brush.
+          Raster pro Sheet einstellbar (48 = RPG Maker MZ/MV, 32 = VX/Ace).
+          Modus „Frei“ für Sprites ohne festes Raster.
+        </div>
+        <div id="assetList"></div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- ======================= TIMELINE ======================= -->
+<div id="timeline">
+  <div class="tl-controls">
+    <button id="btnPlay" title="Animation abspielen/anhalten (Enter)">▶</button>
+    <button id="btnFrameAdd" title="Leeren Frame anfügen">+ Frame</button>
+    <button id="btnFrameDup" title="Frame duplizieren">Dupl.</button>
+    <button id="btnFrameDel" title="Frame löschen">🗑</button>
+    <button id="btnFrameLeft" title="Frame nach links verschieben">◀</button>
+    <button id="btnFrameRight" title="Frame nach rechts verschieben">▶|</button>
+    <label>ms</label>
+    <input type="number" id="inpFrameDur" min="16" max="5000" step="10" value="150" title="Anzeigedauer des aktiven Frames (ms)">
+    <button id="tgOnion" title="Onion-Skin: vorherigen/nächsten Frame durchscheinen lassen">Onion</button>
+  </div>
+  <div id="framesStrip"></div>
+</div>
+
+<!-- ======================= STATUSBAR ======================= -->
+<div id="statusbar">
+  <span id="stDoc">–</span>
+  <span id="stPos">x: –, y: –</span>
+  <span id="stSel"></span>
+  <span id="stHint"></span>
+</div>
+
+<!-- ======================= HIDDEN FILE INPUTS ======================= -->
+<input type="file" id="fileProj" accept=".json,application/json" class="hidden">
+<input type="file" id="fileImport" accept="image/*,.json" class="hidden" multiple>
+<input type="file" id="fileLayer" accept="image/*" class="hidden">
+<input type="file" id="fileAsset" accept="image/*" class="hidden" multiple>
+
+<!-- ======================= DIALOGS ======================= -->
+<dialog id="dlgNew">
+  <div class="dhead">Neues Dokument</div>
+  <div class="dbody">
+    <div class="formrow">
+      <label>Vorlage</label>
+      <select id="selTemplate" style="min-width:280px"></select>
+    </div>
+    <div class="formrow">
+      <label>Breite × Höhe</label>
+      <input type="number" id="inpNewW" min="1" max="2048" value="48"> ×
+      <input type="number" id="inpNewH" min="1" max="2048" value="48"> px
+    </div>
+    <div class="formrow">
+      <label>Kachelgröße</label>
+      <input type="number" id="inpNewT" min="1" max="512" value="48"> px
+      <span style="color:var(--muted)">(für Raster &amp; Snap, z. B. 48 bei RPG Maker MZ/MV)</span>
+    </div>
+    <div class="formrow">
+      <label>Name</label>
+      <input type="text" id="inpNewName" value="pixelart" style="flex:1">
+    </div>
+  </div>
+  <div class="dfoot">
+    <button value="cancel" formmethod="dialog" id="btnNewCancel">Abbrechen</button>
+    <button id="btnNewOk" style="background:var(--accent-dim); border-color:var(--accent)">Erstellen</button>
+  </div>
+</dialog>
+
+<dialog id="dlgExport">
+  <div class="dhead">Als PNG exportieren</div>
+  <div class="dbody">
+    <div class="formrow"><label>Bereich</label>
+      <label><input type="radio" name="expScope" value="frame" checked> Aktueller Frame</label>
+      <label><input type="radio" name="expScope" value="sheet"> Alle Frames als Spritesheet</label>
+      <label><input type="radio" name="expScope" value="layer"> Nur aktive Ebene</label>
+    </div>
+    <div class="formrow" id="rowExpCols">
+      <label>Spalten (Sheet)</label>
+      <input type="number" id="inpExpCols" min="1" max="64" value="4">
+      <span style="color:var(--muted)">Frames werden zeilenweise angeordnet</span>
+    </div>
+    <div class="formrow">
+      <label>Skalierung</label>
+      <select id="selExpScale">
+        <option value="1">1× (Original)</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+        <option value="16">16×</option>
+      </select>
+    </div>
+    <div class="formrow">
+      <label>Dateiname</label>
+      <input type="text" id="inpExpName" value="pixelart" style="flex:1"> <span>.png</span>
+    </div>
+  </div>
+  <div class="dfoot">
+    <button id="btnExpCancel">Abbrechen</button>
+    <button id="btnExpOk" style="background:var(--accent-dim); border-color:var(--accent)">Exportieren</button>
+  </div>
+</dialog>
+
+<dialog id="dlgResize">
+  <div class="dhead">Leinwandgröße ändern</div>
+  <div class="dbody">
+    <div class="formrow">
+      <label>Neue Größe</label>
+      <input type="number" id="inpRw" min="1" max="2048"> ×
+      <input type="number" id="inpRh" min="1" max="2048"> px
+    </div>
+    <div class="formrow">
+      <label>Anker</label>
+      <select id="selAnchor">
+        <option value="tl">Oben links</option>
+        <option value="tc">Oben Mitte</option>
+        <option value="tr">Oben rechts</option>
+        <option value="ml">Mitte links</option>
+        <option value="mc" selected>Zentriert</option>
+        <option value="mr">Mitte rechts</option>
+        <option value="bl">Unten links</option>
+        <option value="bc">Unten Mitte</option>
+        <option value="br">Unten rechts</option>
+      </select>
+    </div>
+    <div class="formrow">
+      <label></label>
+      <label><input type="checkbox" id="chkRescale"> Inhalt skalieren (Nearest-Neighbor)</label>
+    </div>
+  </div>
+  <div class="dfoot">
+    <button id="btnResizeCancel">Abbrechen</button>
+    <button id="btnResizeOk" style="background:var(--accent-dim); border-color:var(--accent)">Anwenden</button>
+  </div>
+</dialog>
+
+<dialog id="dlgImport">
+  <div class="dhead">Bild importieren</div>
+  <div class="dbody">
+    <div id="impFileName" style="color:var(--muted)"></div>
+    <div class="formrow">
+      <label><input type="radio" name="impMode" value="asset" checked> Als Brush-Spritesheet (Stempel-Kacheln)</label>
+    </div>
+    <div class="formrow">
+      <label><input type="radio" name="impMode" value="layer"> Als neue Ebene im aktuellen Dokument</label>
+    </div>
+    <div class="formrow">
+      <label><input type="radio" name="impMode" value="doc"> Als neues Dokument öffnen</label>
+    </div>
+  </div>
+  <div class="dfoot">
+    <button id="btnImpCancel">Abbrechen</button>
+    <button id="btnImpOk" style="background:var(--accent-dim); border-color:var(--accent)">Importieren</button>
+  </div>
+</dialog>
+
+<dialog id="dlgHelp">
+  <div class="dhead">PixelWerk – Hilfe &amp; Tastaturkürzel</div>
+  <div class="dbody">
+    <h4>Werkzeuge</h4>
+    <table>
+      <tr><td><kbd>B</kbd> Stift</td><td><kbd>E</kbd> Radierer</td><td><kbd>G</kbd> Füllen</td></tr>
+      <tr><td><kbd>I</kbd> Pipette</td><td><kbd>L</kbd> Linie</td><td><kbd>U</kbd> Rechteck</td></tr>
+      <tr><td><kbd>O</kbd> Ellipse</td><td><kbd>M</kbd> Auswahl</td><td><kbd>V</kbd> Verschieben</td></tr>
+      <tr><td><kbd>S</kbd> Stempel</td><td><kbd>H</kbd> Hand</td><td><kbd>X</kbd> Farben tauschen</td></tr>
+    </table>
+    <h4>Allgemein</h4>
+    <table>
+      <tr><td><kbd>Strg+Z</kbd> / <kbd>Strg+Y</kbd></td><td>Rückgängig / Wiederholen</td></tr>
+      <tr><td><kbd>Strg+A</kbd> / <kbd>Strg+D</kbd></td><td>Alles auswählen / Auswahl aufheben</td></tr>
+      <tr><td><kbd>Strg+C</kbd> / <kbd>Strg+X</kbd> / <kbd>Strg+V</kbd></td><td>Auswahl kopieren / ausschneiden / als Stempel einfügen</td></tr>
+      <tr><td><kbd>Entf</kbd></td><td>Auswahlinhalt löschen</td></tr>
+      <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Stiftgröße ändern</td></tr>
+      <tr><td><kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></td><td>Zoom / Einpassen (auch Mausrad)</td></tr>
+      <tr><td><kbd>Leertaste</kbd> / mittlere Maustaste</td><td>Ansicht verschieben</td></tr>
+      <tr><td><kbd>Alt+Klick</kbd></td><td>Farbe aufnehmen (in jedem Malwerkzeug)</td></tr>
+      <tr><td>Rechtsklick beim Malen</td><td>Mit Hintergrundfarbe zeichnen</td></tr>
+      <tr><td><kbd>Umschalt</kbd> bei Linie/Rechteck/Ellipse</td><td>45° / Quadrat / Kreis</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Animation abspielen/anhalten</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Auswahl/Aktion abbrechen</td></tr>
+    </table>
+    <h4>Sprite-Brushes (RPG Maker &amp; eigene Sprites)</h4>
+    <p>Über <b>Import</b> oder das Brush-Panel ein Spritesheet laden (PNG). Im Panel die Rastergröße
+    einstellen – z. B. 48 px für RPG Maker MZ/MV oder 32 px für VX/Ace. Eine Kachel anklicken oder
+    mehrere Kacheln aufziehen: Die Auswahl wird zum Stempel-Brush, mit dem sich z. B. Terrain direkt
+    auf die Leinwand malen lässt. Für Sprites ohne festes Raster den Modus <b>Frei</b> wählen und
+    einen beliebigen Pixelbereich aufziehen.</p>
+    <h4>Hilfslinien &amp; Raster</h4>
+    <p>Hilfslinien aus dem oberen/linken Lineal auf die Leinwand ziehen. Mit <kbd>Umschalt</kbd>+Ziehen
+    verschieben, zum Löschen zurück auf das Lineal ziehen (oder „✕ Hilfslinien“). Bei aktivem
+    <b>Snap</b> rasten Stempel, Auswahl, Verschieben und Hilfslinien an der Kachelgröße ein.</p>
+    <h4>Speichern</h4>
+    <p><b>Speichern</b> erzeugt eine Projektdatei (JSON) mit allen Ebenen, Frames, Paletten,
+    Hilfslinien und geladenen Brushes – <b>Öffnen</b> stellt alles wieder her.
+    <b>Export PNG</b> erzeugt das fertige Bild oder ein Animations-Spritesheet.</p>
+  </div>
+  <div class="dfoot">
+    <button id="btnHelpClose">Schließen</button>
+  </div>
+</dialog>
+
+<script>
+'use strict';
+/* ============================================================
+   PixelWerk – Pixel-Art-Editor in einer einzigen HTML-Datei.
+   Läuft komplett lokal (file://), kein Build, keine Abhängigkeiten.
+   ============================================================ */
+
+/* ---------------- Utilities ---------------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+let _uid = 1;
+const uid = () => _uid++;
+
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+function ctxOf(c) {
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.imageSmoothingEnabled = false;
+  return x;
+}
+function cloneCanvas(src) {
+  const c = makeCanvas(src.width, src.height);
+  ctxOf(c).drawImage(src, 0, 0);
+  return c;
+}
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('Bild konnte nicht geladen werden'));
+    img.src = src;
+  });
+}
+function readFileAsDataURL(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(file);
+  });
+}
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHex(c) {
+  return '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+function rgbaCss(c) {
+  return `rgba(${c.r},${c.g},${c.b},${(c.a / 255).toFixed(3)})`;
+}
+function sameColor(a, b) {
+  return a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a;
+}
+
+/* ---------------- Paletten ---------------- */
+const PALETTES = {
+  db32: ['#000000','#222034','#45283c','#663931','#8f563b','#df7126','#d9a066','#eec39a',
+         '#fbf236','#99e550','#6abe30','#37946e','#4b692f','#524b24','#323c39','#3f3f74',
+         '#306082','#5b6ee1','#639bff','#5fcde4','#cbdbfc','#ffffff','#9badb7','#847e87',
+         '#696a6a','#595652','#76428a','#ac3232','#d95763','#d77bba','#8f974a','#8a6f30'],
+  pico8: ['#000000','#1d2b53','#7e2553','#008751','#ab5236','#5f574f','#c2c3c7','#fff1e8',
+          '#ff004d','#ffa300','#ffec27','#00e436','#29adff','#83769c','#ff77a8','#ffccaa'],
+};
+
+/* ---------------- Vorlagen ---------------- */
+const TEMPLATES = [
+  { id: 'custom',   name: 'Eigene Größe …',                                    w: 64,  h: 64,  t: 16 },
+  { id: 't16',      name: 'Einzeltile 16×16',                                  w: 16,  h: 16,  t: 16 },
+  { id: 't32',      name: 'Einzeltile 32×32 (RPG Maker VX/Ace)',               w: 32,  h: 32,  t: 32 },
+  { id: 't48',      name: 'Einzeltile 48×48 (RPG Maker MZ/MV)',                w: 48,  h: 48,  t: 48 },
+  { id: 'char_mz',  name: 'RPG Maker MZ/MV – Charakter 144×192 (3×4)',         w: 144, h: 192, t: 48 },
+  { id: 'sheet_mz', name: 'RPG Maker MZ/MV – Charakterblatt 576×384 (8 Chars)',w: 576, h: 384, t: 48 },
+  { id: 'char_vx',  name: 'RPG Maker VX/Ace – Charakter 96×128 (3×4)',         w: 96,  h: 128, t: 32 },
+  { id: 'tsB_mz',   name: 'RPG Maker MZ/MV – Tileset B–E 768×768',             w: 768, h: 768, t: 48 },
+  { id: 'tsA2_mz',  name: 'RPG Maker MZ/MV – Tileset A2 768×576',              w: 768, h: 576, t: 48 },
+  { id: 'icon32',   name: 'Icon 32×32',                                        w: 32,  h: 32,  t: 16 },
+  { id: 'gb',       name: 'Game Boy Bildschirm 160×144',                       w: 160, h: 144, t: 8  },
+  { id: 'pico',     name: 'PICO-8 128×128',                                    w: 128, h: 128, t: 8  },
+];
+
+/* ---------------- Zustand ---------------- */
+let doc = null; // { w, h, tileW, tileH, name, layers:[{id,name,visible,opacity,locked,cels:[canvas]}], frames:[{duration}] }
+
+const state = {
+  activeLayer: 0,
+  activeFrame: 0,
+  tool: 'pencil',
+  fg: { r: 0, g: 0, b: 0, a: 255 },
+  bg: { r: 255, g: 255, b: 255, a: 255 },
+  brushSize: 1,
+  shapeFill: false,
+  fillGlobal: false,
+  stampOverwrite: false,
+  mirrorX: false,
+  mirrorY: false,
+  selection: null,          // {x,y,w,h} in Dokumentpixeln
+  stamp: null,              // {canvas, name}
+  clipboard: null,          // {canvas, name}
+  assets: [],               // {id,name,dataURL,img,tileW,tileH,offX,offY,spacing,mode:'grid'|'free',sel,scale}
+  guides: [],               // {axis:'h'|'v', pos}
+  palette: PALETTES.db32.slice(),
+  paletteId: 'db32',
+  show: { pixelGrid: true, tileGrid: true, rulers: true, guides: true },
+  snap: true,
+  onion: false,
+  playing: false,
+  dirtyDoc: false,
+};
+
+const view = { zoom: 8, panX: 40, panY: 40 };
+const ZOOMS = [0.125, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+
+let previewCanvas = null;   // Overlay in Dokumentgröße (Formen, Stempel-Geist, Verschieben)
+let previewAlpha = 1;
+let needsRender = true;
+let thumbsDirty = false;
+let lastThumbUpdate = 0;
+
+function requestRender() { needsRender = true; }
+
+/* ---------------- Dokumentmodell ---------------- */
+function makeLayer(name, w, h, frameCount) {
+  return {
+    id: uid(), name, visible: true, opacity: 1, locked: false,
+    cels: Array.from({ length: frameCount }, () => makeCanvas(w, h)),
+  };
+}
+
+function createDoc(w, h, tileW, tileH, name) {
+  doc = {
+    w, h, tileW, tileH, name: name || 'pixelart',
+    layers: [makeLayer('Ebene 1', w, h, 1)],
+    frames: [{ duration: 150 }],
+  };
+  state.activeLayer = 0;
+  state.activeFrame = 0;
+  state.selection = null;
+  state.guides = [];
+  undoStack.length = 0;
+  redoStack.length = 0;
+  state.dirtyDoc = false;
+  previewCanvas = makeCanvas(w, h);
+  $('#inpTileW').value = tileW;
+  $('#inpTileH').value = tileH;
+  fitView();
+  refreshAllUI();
+}
+
+function activeLayer() { return doc.layers[state.activeLayer]; }
+function activeCel() { return doc.layers[state.activeLayer].cels[state.activeFrame]; }
+function getCel(li, fi) { return doc.layers[li].cels[fi]; }
+
+function compositeFrame(fi, opts = {}) {
+  const c = makeCanvas(doc.w, doc.h);
+  const x = ctxOf(c);
+  for (let i = doc.layers.length - 1; i >= 0; i--) { // unterste Ebene = Ende der Liste
+    const L = doc.layers[i];
+    if (!L.visible && !opts.includeHidden) continue;
+    if (opts.onlyLayer !== undefined && i !== opts.onlyLayer) continue;
+    x.globalAlpha = L.opacity;
+    x.drawImage(L.cels[fi], 0, 0);
+  }
+  x.globalAlpha = 1;
+  return c;
+}
+
+/* ---------------- Undo / Redo ---------------- */
+const undoStack = [];
+const redoStack = [];
+const UNDO_LIMIT = 80;
+
+function pushUndo(entry) {
+  undoStack.push(entry);
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack.length = 0;
+  state.dirtyDoc = true;
+  updateUndoButtons();
+}
+function doUndo() {
+  const e = undoStack.pop();
+  if (!e) return;
+  e.undo();
+  redoStack.push(e);
+  afterHistoryChange();
+}
+function doRedo() {
+  const e = redoStack.pop();
+  if (!e) return;
+  e.redo();
+  undoStack.push(e);
+  afterHistoryChange();
+}
+function afterHistoryChange() {
+  state.activeLayer = clamp(state.activeLayer, 0, doc.layers.length - 1);
+  state.activeFrame = clamp(state.activeFrame, 0, doc.frames.length - 1);
+  if (state.selection) clampSelection();
+  state.dirtyDoc = true;
+  updateUndoButtons();
+  docPixelsChanged();
+  refreshAllUI();
+}
+function updateUndoButtons() {
+  $('#btnUndo').disabled = undoStack.length === 0;
+  $('#btnRedo').disabled = redoStack.length === 0;
+}
+
+function beginCelEdit(li = state.activeLayer, fi = state.activeFrame) {
+  const cel = getCel(li, fi);
+  return { li, fi, before: ctxOf(cel).getImageData(0, 0, doc.w, doc.h) };
+}
+function commitCelEdit(edit) {
+  const cel = getCel(edit.li, edit.fi);
+  const after = ctxOf(cel).getImageData(0, 0, doc.w, doc.h);
+  const { li, fi, before } = edit;
+  pushUndo({
+    undo() { ctxOf(getCel(li, fi)).putImageData(before, 0, 0); },
+    redo() { ctxOf(getCel(li, fi)).putImageData(after, 0, 0); },
+  });
+  docPixelsChanged();
+}
+function docPixelsChanged() {
+  thumbsDirty = true;
+  requestRender();
+}
+
+/* ---------------- Koordinaten & Ansicht ---------------- */
+const mainCanvas = $('#mainCanvas');
+const mainCtx = mainCanvas.getContext('2d');
+const viewport = $('#viewport');
+const rulerTop = $('#rulerTop');
+const rulerLeft = $('#rulerLeft');
+
+function screenFromEvent(ev) {
+  const r = mainCanvas.getBoundingClientRect();
+  return { sx: ev.clientX - r.left, sy: ev.clientY - r.top };
+}
+function docPosFromEvent(ev) {
+  const { sx, sy } = screenFromEvent(ev);
+  return { x: (sx - view.panX) / view.zoom, y: (sy - view.panY) / view.zoom };
+}
+function docPixelFromEvent(ev) {
+  const p = docPosFromEvent(ev);
+  return { x: Math.floor(p.x), y: Math.floor(p.y) };
+}
+
+function setZoom(nz, sx, sy) {
+  nz = clamp(nz, ZOOMS[0], ZOOMS[ZOOMS.length - 1]);
+  if (sx === undefined) { sx = viewport.clientWidth / 2; sy = viewport.clientHeight / 2; }
+  const dx = (sx - view.panX) / view.zoom;
+  const dy = (sy - view.panY) / view.zoom;
+  view.zoom = nz;
+  view.panX = sx - dx * nz;
+  view.panY = sy - dy * nz;
+  $('#lblZoom').textContent = Math.round(nz * 100) + ' %';
+  requestRender();
+}
+function zoomStep(dir, sx, sy) {
+  let i = ZOOMS.findIndex(z => z >= view.zoom - 1e-9);
+  if (i < 0) i = ZOOMS.length - 1;
+  if (dir > 0 && ZOOMS[i] > view.zoom + 1e-9) { /* zwischen Stufen: aufrunden reicht */ }
+  else i += dir;
+  i = clamp(i, 0, ZOOMS.length - 1);
+  setZoom(ZOOMS[i], sx, sy);
+}
+function fitView() {
+  const vw = Math.max(viewport.clientWidth, 50);
+  const vh = Math.max(viewport.clientHeight, 50);
+  let z = ZOOMS[0];
+  for (const zz of ZOOMS) {
+    if (doc.w * zz <= vw - 32 && doc.h * zz <= vh - 32) z = zz;
+  }
+  view.zoom = z;
+  view.panX = Math.round((vw - doc.w * z) / 2);
+  view.panY = Math.round((vh - doc.h * z) / 2);
+  $('#lblZoom').textContent = Math.round(z * 100) + ' %';
+  requestRender();
+}
+
+function snapPoint(x, y) {
+  if (!state.snap) return { x: Math.round(x), y: Math.round(y) };
+  return {
+    x: Math.round(x / doc.tileW) * doc.tileW,
+    y: Math.round(y / doc.tileH) * doc.tileH,
+  };
+}
+function snapOffset(dx, dy) {
+  if (!state.snap) return { dx: Math.round(dx), dy: Math.round(dy) };
+  return {
+    dx: Math.round(dx / doc.tileW) * doc.tileW,
+    dy: Math.round(dy / doc.tileH) * doc.tileH,
+  };
+}
+function clampSelection() {
+  const s = state.selection;
+  if (!s) return;
+  const x0 = clamp(s.x, 0, doc.w);
+  const y0 = clamp(s.y, 0, doc.h);
+  const x1 = clamp(s.x + s.w, 0, doc.w);
+  const y1 = clamp(s.y + s.h, 0, doc.h);
+  if (x1 - x0 < 1 || y1 - y0 < 1) { state.selection = null; }
+  else { state.selection = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; }
+  updateSelStatus();
+}
+
+/* ---------------- Rendering ---------------- */
+let checkerPattern = null;
+function getCheckerPattern(ctx) {
+  if (!checkerPattern) {
+    const p = makeCanvas(24, 24);
+    const px = ctxOf(p);
+    px.fillStyle = '#3c3c42'; px.fillRect(0, 0, 24, 24);
+    px.fillStyle = '#4a4a52'; px.fillRect(0, 0, 12, 12); px.fillRect(12, 12, 12, 12);
+    checkerPattern = ctx.createPattern(p, 'repeat');
+  }
+  return checkerPattern;
+}
+
+function tintedCel(fi, color) {
+  const c = compositeFrame(fi);
+  const x = ctxOf(c);
+  x.globalCompositeOperation = 'source-atop';
+  x.fillStyle = color;
+  x.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = 'source-over';
+  return c;
+}
+
+let antsPhase = 0;
+
+function render(t) {
+  const dpr = window.devicePixelRatio || 1;
+  const vw = viewport.clientWidth, vh = viewport.clientHeight;
+  if (vw === 0 || vh === 0) return;
+  if (mainCanvas.width !== Math.round(vw * dpr) || mainCanvas.height !== Math.round(vh * dpr)) {
+    mainCanvas.width = Math.round(vw * dpr);
+    mainCanvas.height = Math.round(vh * dpr);
+  }
+  const ctx = mainCtx;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, vw, vh);
+  ctx.fillStyle = '#141519';
+  ctx.fillRect(0, 0, vw, vh);
+
+  const z = view.zoom;
+  const dx = view.panX, dy = view.panY;
+  const dw = doc.w * z, dh = doc.h * z;
+
+  // Transparenz-Schachbrett
+  ctx.fillStyle = getCheckerPattern(ctx);
+  ctx.fillRect(dx, dy, dw, dh);
+
+  // Onion-Skin
+  if (state.onion && !state.playing && doc.frames.length > 1) {
+    ctx.globalAlpha = 0.3;
+    const prev = (state.activeFrame - 1 + doc.frames.length) % doc.frames.length;
+    const next = (state.activeFrame + 1) % doc.frames.length;
+    if (prev !== state.activeFrame) ctx.drawImage(tintedCel(prev, 'rgba(255,70,70,0.55)'), dx, dy, dw, dh);
+    if (next !== state.activeFrame && next !== prev) ctx.drawImage(tintedCel(next, 'rgba(70,140,255,0.55)'), dx, dy, dw, dh);
+    ctx.globalAlpha = 1;
+  }
+
+  // Ebenen des aktiven Frames
+  for (let i = doc.layers.length - 1; i >= 0; i--) {
+    const L = doc.layers[i];
+    if (!L.visible) continue;
+    ctx.globalAlpha = L.opacity;
+    ctx.drawImage(L.cels[state.activeFrame], dx, dy, dw, dh);
+  }
+  ctx.globalAlpha = 1;
+
+  // Vorschau-Overlay (Formen, Stempel, Verschieben)
+  if (previewCanvas) {
+    ctx.globalAlpha = previewAlpha;
+    ctx.drawImage(previewCanvas, dx, dy, dw, dh);
+    ctx.globalAlpha = 1;
+  }
+
+  // Sichtbarer Dokumentbereich (für Rasterlinien)
+  const vx0 = Math.max(0, Math.floor((0 - dx) / z));
+  const vy0 = Math.max(0, Math.floor((0 - dy) / z));
+  const vx1 = Math.min(doc.w, Math.ceil((vw - dx) / z));
+  const vy1 = Math.min(doc.h, Math.ceil((vh - dy) / z));
+
+  // Pixelraster
+  if (state.show.pixelGrid && z >= 8) {
+    ctx.strokeStyle = 'rgba(128,128,128,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = vx0; x <= vx1; x++) {
+      const sx = Math.round(dx + x * z) + 0.5;
+      ctx.moveTo(sx, dy + vy0 * z); ctx.lineTo(sx, dy + vy1 * z);
+    }
+    for (let y = vy0; y <= vy1; y++) {
+      const sy = Math.round(dy + y * z) + 0.5;
+      ctx.moveTo(dx + vx0 * z, sy); ctx.lineTo(dx + vx1 * z, sy);
+    }
+    ctx.stroke();
+  }
+
+  // Kachelraster
+  if (state.show.tileGrid && doc.tileW >= 2 && doc.tileH >= 2 && z * doc.tileW >= 6) {
+    ctx.strokeStyle = 'rgba(80,160,255,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = Math.ceil(vx0 / doc.tileW) * doc.tileW; x <= vx1; x += doc.tileW) {
+      const sx = Math.round(dx + x * z) + 0.5;
+      ctx.moveTo(sx, dy + vy0 * z); ctx.lineTo(sx, dy + vy1 * z);
+    }
+    for (let y = Math.ceil(vy0 / doc.tileH) * doc.tileH; y <= vy1; y += doc.tileH) {
+      const sy = Math.round(dy + y * z) + 0.5;
+      ctx.moveTo(dx + vx0 * z, sy); ctx.lineTo(dx + vx1 * z, sy);
+    }
+    ctx.stroke();
+  }
+
+  // Dokumentrand
+  ctx.strokeStyle = '#666c7d';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(dx - 0.5, dy - 0.5, dw + 1, dh + 1);
+
+  // Spiegelachsen
+  if (state.mirrorX || state.mirrorY) {
+    ctx.strokeStyle = 'rgba(255,80,220,0.7)';
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    if (state.mirrorX) {
+      const sx = dx + (doc.w / 2) * z;
+      ctx.moveTo(sx, dy); ctx.lineTo(sx, dy + dh);
+    }
+    if (state.mirrorY) {
+      const sy = dy + (doc.h / 2) * z;
+      ctx.moveTo(dx, sy); ctx.lineTo(dx + dw, sy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Hilfslinien
+  if (state.show.guides) {
+    for (const g of state.guides) {
+      ctx.strokeStyle = (g === dragGuide) ? '#ffb64f' : 'rgba(0,220,255,0.85)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (g.axis === 'h') {
+        const sy = Math.round(dy + g.pos * z) + 0.5;
+        ctx.moveTo(0, sy); ctx.lineTo(vw, sy);
+      } else {
+        const sx = Math.round(dx + g.pos * z) + 0.5;
+        ctx.moveTo(sx, 0); ctx.lineTo(sx, vh);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // Auswahl (Marching Ants)
+  if (state.selection) {
+    const s = state.selection;
+    const rx = dx + s.x * z, ry = dy + s.y * z, rw = s.w * z, rh = s.h * z;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = '#000';
+    ctx.lineDashOffset = -antsPhase;
+    ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+    ctx.strokeStyle = '#fff';
+    ctx.lineDashOffset = -antsPhase + 5;
+    ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+    ctx.setLineDash([]);
+  }
+
+  // Pinsel-Cursor
+  if (hoverPixel && !pointerState.panning &&
+      ['pencil', 'eraser', 'line', 'rect', 'ellipse'].includes(state.tool)) {
+    const s = state.brushSize;
+    const off = Math.floor((s - 1) / 2);
+    const bx = hoverPixel.x - off, by = hoverPixel.y - off;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(dx + bx * z - 0.5, dy + by * z - 0.5, s * z + 1, s * z + 1);
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(dx + bx * z + 0.5, dy + by * z + 0.5, s * z - 1, s * z - 1);
+  }
+
+  renderRulers(dpr);
+}
+
+/* ---------------- Lineale ---------------- */
+function pickRulerStep(z) {
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+  for (const s of steps) { if (s * z >= 42) return s; }
+  return 1000;
+}
+
+function renderRulers(dpr) {
+  if (!state.show.rulers) return;
+  const z = view.zoom;
+  for (const which of ['top', 'left']) {
+    const cv = which === 'top' ? rulerTop : rulerLeft;
+    const cw = cv.clientWidth, ch = cv.clientHeight;
+    if (cw === 0 || ch === 0) continue;
+    if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) {
+      cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+    }
+    const c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, cw, ch);
+    c.fillStyle = '#22242b';
+    c.fillRect(0, 0, cw, ch);
+    c.strokeStyle = '#4a4f5d';
+    c.fillStyle = '#9aa0b0';
+    c.font = '9px sans-serif';
+    c.lineWidth = 1;
+    const step = pickRulerStep(z);
+    const pan = which === 'top' ? view.panX : view.panY;
+    const size = which === 'top' ? cw : ch;
+    const from = Math.floor((0 - pan) / z / step) * step;
+    const to = Math.ceil((size - pan) / z / step) * step;
+    c.beginPath();
+    for (let v = from; v <= to; v += step) {
+      const s = Math.round(pan + v * z) + 0.5;
+      if (which === 'top') {
+        c.moveTo(s, ch); c.lineTo(s, ch - 9);
+        c.fillText(String(v), s + 2, 9);
+      } else {
+        c.moveTo(ch === 0 ? 0 : cw, s); c.lineTo(cw - 9, s);
+        c.save();
+        c.translate(8, s + 2);
+        c.rotate(-Math.PI / 2);
+        c.textAlign = 'right';
+        c.fillText(String(v), 0, 0);
+        c.restore();
+      }
+      // Zwischenticks
+      const sub = step / 5;
+      if (sub * z >= 5) {
+        for (let k = 1; k < 5; k++) {
+          const ss = Math.round(pan + (v + sub * k) * z) + 0.5;
+          if (which === 'top') { c.moveTo(ss, ch); c.lineTo(ss, ch - 4); }
+          else { c.moveTo(cw, ss); c.lineTo(cw - 4, ss); }
+        }
+      }
+    }
+    c.stroke();
+    // Dokumentbereich hervorheben
+    c.fillStyle = 'rgba(79,140,255,0.15)';
+    if (which === 'top') c.fillRect(pan, 0, doc.w * z, ch);
+    else c.fillRect(0, pan, cw, doc.h * z);
+    // Cursor-Markierung
+    if (hoverPixel) {
+      c.strokeStyle = '#ffb64f';
+      c.beginPath();
+      if (which === 'top') {
+        const s = Math.round(pan + (hoverPixel.x + 0.5) * z) + 0.5;
+        c.moveTo(s, 0); c.lineTo(s, ch);
+      } else {
+        const s = Math.round(pan + (hoverPixel.y + 0.5) * z) + 0.5;
+        c.moveTo(0, s); c.lineTo(cw, s);
+      }
+      c.stroke();
+    }
+  }
+}
+
+/* ---------------- Render-Schleife ---------------- */
+let playAccum = 0;
+let lastT = 0;
+function frameLoop(t) {
+  const dt = lastT ? t - lastT : 0;
+  lastT = t;
+  antsPhase = (t / 100) % 10;
+  if (state.playing && doc.frames.length > 1) {
+    playAccum += dt;
+    const dur = doc.frames[state.activeFrame].duration || 100;
+    if (playAccum >= dur) {
+      playAccum = 0;
+      state.activeFrame = (state.activeFrame + 1) % doc.frames.length;
+      highlightActiveFrame();
+      requestRender();
+    }
+  }
+  if (thumbsDirty && t - lastThumbUpdate > 300) {
+    lastThumbUpdate = t;
+    thumbsDirty = false;
+    updateThumbs();
+  }
+  if (needsRender || state.selection || state.playing) {
+    needsRender = false;
+    render(t);
+  }
+  requestAnimationFrame(frameLoop);
+}
+
+/* ============================================================
+   Mal-Primitive: Alles wird als Liste von Pixel-Rechtecken
+   gerastert (schnell, spiegelbar, an Auswahl beschneidbar).
+   ============================================================ */
+function brushRect(x, y, size) {
+  const off = Math.floor((size - 1) / 2);
+  return { x: x - off, y: y - off, w: size, h: size };
+}
+function linePoints(x0, y0, x1, y1) {
+  const pts = [];
+  let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    pts.push({ x: x0, y: y0 });
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+  return pts;
+}
+function mirrorRects(rects) {
+  let out = rects;
+  if (state.mirrorX) {
+    const m = [];
+    for (const r of out) { m.push(r, { x: doc.w - r.x - r.w, y: r.y, w: r.w, h: r.h }); }
+    out = m;
+  }
+  if (state.mirrorY) {
+    const m = [];
+    for (const r of out) { m.push(r, { x: r.x, y: doc.h - r.y - r.h, w: r.w, h: r.h }); }
+    out = m;
+  }
+  return out;
+}
+function clipRects(rects) {
+  const s = state.selection;
+  const bx0 = s ? s.x : 0, by0 = s ? s.y : 0;
+  const bx1 = s ? s.x + s.w : doc.w, by1 = s ? s.y + s.h : doc.h;
+  const out = [];
+  for (const r of rects) {
+    const x0 = Math.max(r.x, bx0), y0 = Math.max(r.y, by0);
+    const x1 = Math.min(r.x + r.w, bx1), y1 = Math.min(r.y + r.h, by1);
+    if (x1 > x0 && y1 > y0) out.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  }
+  return out;
+}
+function paintRects(target, rects, opts) {
+  const x = ctxOf(target);
+  if (opts.erase) {
+    for (const r of rects) x.clearRect(r.x, r.y, r.w, r.h);
+  } else {
+    x.fillStyle = rgbaCss(opts.color);
+    for (const r of rects) x.fillRect(r.x, r.y, r.w, r.h);
+  }
+}
+
+function rectShapeRects(a, b, fill, thick) {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+  const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  if (fill || w <= thick * 2 || h <= thick * 2) return [{ x: x0, y: y0, w, h }];
+  return [
+    { x: x0, y: y0, w, h: thick },
+    { x: x0, y: y1 - thick + 1, w, h: thick },
+    { x: x0, y: y0 + thick, w: thick, h: h - thick * 2 },
+    { x: x1 - thick + 1, y: y0 + thick, w: thick, h: h - thick * 2 },
+  ];
+}
+function ellipseSpans(a, b) {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+  const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+  const cx = (x0 + x1 + 1) / 2, cy = (y0 + y1 + 1) / 2;
+  const rx = (x1 - x0 + 1) / 2, ry = (y1 - y0 + 1) / 2;
+  const spans = [];
+  for (let y = y0; y <= y1; y++) {
+    const t = 1 - Math.pow((y + 0.5 - cy) / ry, 2);
+    if (t < 0) continue;
+    const dxs = rx * Math.sqrt(t);
+    let xl = Math.ceil(cx - dxs - 0.5);
+    let xr = Math.floor(cx + dxs - 0.5);
+    if (xr < xl) { xl = xr = Math.round(cx - 0.5); }
+    spans.push({ y, xl, xr });
+  }
+  return spans;
+}
+function ellipseShapeRects(a, b, fill, thick) {
+  const spans = ellipseSpans(a, b);
+  const rects = [];
+  if (fill) {
+    for (const s of spans) rects.push({ x: s.xl, y: s.y, w: s.xr - s.xl + 1, h: 1 });
+    return rects;
+  }
+  for (let i = 0; i < spans.length; i++) {
+    const s = spans[i];
+    const p = spans[i - 1], n = spans[i + 1];
+    // Ein Pixel ist Rand, wenn die Zeile darüber ODER darunter ihn nicht abdeckt.
+    const covXl = Math.max(p ? p.xl : Infinity, n ? n.xl : Infinity);
+    const covXr = Math.min(p ? p.xr : -Infinity, n ? n.xr : -Infinity);
+    const lEnd = Math.min(s.xr, Math.max(s.xl, covXl - 1));
+    const rStart = Math.max(s.xl, Math.min(s.xr, covXr + 1));
+    if (lEnd >= rStart - 1) {
+      rects.push({ x: s.xl, y: s.y, w: s.xr - s.xl + 1, h: 1 });
+    } else {
+      rects.push({ x: s.xl, y: s.y, w: lEnd - s.xl + 1, h: 1 });
+      rects.push({ x: rStart, y: s.y, w: s.xr - rStart + 1, h: 1 });
+    }
+  }
+  if (thick > 1) {
+    const off = Math.floor((thick - 1) / 2);
+    return rects.map(r => ({ x: r.x - off, y: r.y - off, w: r.w + thick - 1, h: r.h + thick - 1 }));
+  }
+  return rects;
+}
+function lineShapeRects(a, b, size) {
+  return linePoints(a.x, a.y, b.x, b.y).map(p => brushRect(p.x, p.y, size));
+}
+function computeShapeRects(tool, a, b) {
+  if (tool === 'line') return lineShapeRects(a, b, state.brushSize);
+  if (tool === 'rect') return rectShapeRects(a, b, state.shapeFill, state.brushSize);
+  return ellipseShapeRects(a, b, state.shapeFill, state.brushSize);
+}
+function constrainShape(tool, a, px, shiftKey) {
+  if (!shiftKey) return px;
+  const dx = px.x - a.x, dy = px.y - a.y;
+  if (tool === 'line') {
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    if (adx > ady * 2) return { x: px.x, y: a.y };
+    if (ady > adx * 2) return { x: a.x, y: px.y };
+    const d = Math.max(adx, ady);
+    return { x: a.x + Math.sign(dx || 1) * d, y: a.y + Math.sign(dy || 1) * d };
+  }
+  const d = Math.max(Math.abs(dx), Math.abs(dy));
+  return { x: a.x + Math.sign(dx || 1) * d, y: a.y + Math.sign(dy || 1) * d };
+}
+
+/* ---------------- Flood Fill ---------------- */
+function floodFill(cel, x, y, color, global) {
+  const s = state.selection;
+  const bx0 = s ? s.x : 0, by0 = s ? s.y : 0;
+  const bx1 = s ? s.x + s.w : doc.w, by1 = s ? s.y + s.h : doc.h;
+  if (x < bx0 || y < by0 || x >= bx1 || y >= by1) return false;
+  const ctx = ctxOf(cel);
+  const img = ctx.getImageData(0, 0, doc.w, doc.h);
+  const d = img.data;
+  const W = doc.w;
+  const at = (px, py) => (py * W + px) * 4;
+  const i0 = at(x, y);
+  const tr = d[i0], tg = d[i0 + 1], tb = d[i0 + 2], ta = d[i0 + 3];
+  if (tr === color.r && tg === color.g && tb === color.b && ta === color.a) return false;
+  const match = i => d[i] === tr && d[i + 1] === tg && d[i + 2] === tb && d[i + 3] === ta;
+  const set = i => { d[i] = color.r; d[i + 1] = color.g; d[i + 2] = color.b; d[i + 3] = color.a; };
+  if (global) {
+    for (let py = by0; py < by1; py++) {
+      for (let px = bx0; px < bx1; px++) {
+        const i = at(px, py);
+        if (match(i)) set(i);
+      }
+    }
+  } else {
+    const stack = [x, y];
+    set(i0);
+    while (stack.length) {
+      const py = stack.pop(), px = stack.pop();
+      if (px > bx0)     { const i = at(px - 1, py); if (match(i)) { set(i); stack.push(px - 1, py); } }
+      if (px < bx1 - 1) { const i = at(px + 1, py); if (match(i)) { set(i); stack.push(px + 1, py); } }
+      if (py > by0)     { const i = at(px, py - 1); if (match(i)) { set(i); stack.push(px, py - 1); } }
+      if (py < by1 - 1) { const i = at(px, py + 1); if (match(i)) { set(i); stack.push(px, py + 1); } }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return true;
+}
+
+/* ---------------- Vorschau-Overlay ---------------- */
+function clearPreview() {
+  if (previewCanvas) ctxOf(previewCanvas).clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  previewAlpha = 1;
+  requestRender();
+}
+
+/* ---------------- Status & Hinweise ---------------- */
+const TOOL_HINTS = {
+  pencil: 'Ziehen: zeichnen · Rechte Maustaste: Hintergrundfarbe · Alt+Klick: Pipette',
+  eraser: 'Ziehen: radieren · [ ] ändert die Größe',
+  fill: 'Klick: Fläche füllen · Rechtsklick: mit Hintergrundfarbe · Option „global“ ersetzt überall',
+  eyedropper: 'Klick: Vordergrundfarbe aufnehmen · Rechtsklick: Hintergrundfarbe',
+  line: 'Ziehen: Linie · Umschalt: 45°-Winkel',
+  rect: 'Ziehen: Rechteck · Umschalt: Quadrat',
+  ellipse: 'Ziehen: Ellipse · Umschalt: Kreis',
+  select: 'Ziehen: Bereich auswählen · Strg+C/X/V, Entf · Snap rastet an Kacheln ein',
+  move: 'Ziehen: Auswahl bzw. ganze Ebene verschieben · Snap rastet an Kacheln ein',
+  stamp: 'Brush im Panel rechts wählen, dann klicken/ziehen · Snap rastet an Kacheln ein',
+  hand: 'Ziehen: Ansicht verschieben (auch Leertaste oder mittlere Maustaste)',
+};
+function hint(msg) { $('#stHint').textContent = msg; }
+function updateSelStatus() {
+  const s = state.selection;
+  $('#stSel').textContent = s ? `Auswahl: ${s.w}×${s.h} @ ${s.x},${s.y}` : '';
+}
+function paintable() {
+  const L = activeLayer();
+  if (L.locked) { hint('⚠ Ebene ist gesperrt.'); return false; }
+  if (!L.visible) { hint('⚠ Ebene ist ausgeblendet.'); return false; }
+  return true;
+}
+
+/* ---------------- Werkzeuge ---------------- */
+let stroke = null;      // Stift/Radierer
+let shapeOp = null;     // Linie/Rechteck/Ellipse
+let selOp = null;       // Auswahl-Aufziehen
+let moveOp = null;      // Verschieben
+let stampOp = null;     // Stempeln
+let hoverPixel = null;
+let dragGuide = null;
+
+function paintSegment(a, b, color, erase) {
+  let rects = linePoints(a.x, a.y, b.x, b.y).map(p => brushRect(p.x, p.y, state.brushSize));
+  rects = clipRects(mirrorRects(rects));
+  paintRects(activeCel(), rects, { color, erase });
+  docPixelsChanged();
+}
+
+const TOOLS = {
+  pencil: {
+    down(px, ev) {
+      if (!paintable()) return;
+      stroke = { edit: beginCelEdit(), last: px, color: ev.button === 2 ? state.bg : state.fg, erase: false };
+      paintSegment(px, px, stroke.color, false);
+    },
+    move(px) { if (!stroke) return; paintSegment(stroke.last, px, stroke.color, stroke.erase); stroke.last = px; },
+    up() { if (!stroke) return; commitCelEdit(stroke.edit); stroke = null; },
+    cancel() {
+      if (!stroke) return;
+      ctxOf(getCel(stroke.edit.li, stroke.edit.fi)).putImageData(stroke.edit.before, 0, 0);
+      stroke = null; docPixelsChanged();
+    },
+  },
+  eraser: {
+    down(px) {
+      if (!paintable()) return;
+      stroke = { edit: beginCelEdit(), last: px, color: state.fg, erase: true };
+      paintSegment(px, px, null, true);
+    },
+    move(px) { if (!stroke) return; paintSegment(stroke.last, px, null, true); stroke.last = px; },
+    up() { TOOLS.pencil.up(); },
+    cancel() { TOOLS.pencil.cancel(); },
+  },
+  fill: {
+    down(px, ev) {
+      if (!paintable()) return;
+      if (px.x < 0 || px.y < 0 || px.x >= doc.w || px.y >= doc.h) return;
+      const color = ev.button === 2 ? state.bg : state.fg;
+      const edit = beginCelEdit();
+      if (floodFill(activeCel(), px.x, px.y, color, state.fillGlobal)) commitCelEdit(edit);
+    },
+  },
+  eyedropper: {
+    down(px, ev) { pickColorAt(px, ev.button === 2); },
+    move(px, ev) { pickColorAt(px, ev.buttons === 2); },
+  },
+  line: { down: shapeDown, move: shapeMove, up: shapeUp, cancel: shapeCancel },
+  rect: { down: shapeDown, move: shapeMove, up: shapeUp, cancel: shapeCancel },
+  ellipse: { down: shapeDown, move: shapeMove, up: shapeUp, cancel: shapeCancel },
+  select: {
+    down(px, ev) {
+      const p = docPosFromEvent(ev);
+      selOp = { ax: p.x, ay: p.y };
+      state.selection = null;
+      updateSelStatus();
+      requestRender();
+    },
+    move(px, ev) {
+      if (!selOp) return;
+      const p = docPosFromEvent(ev);
+      state.selection = computeSelRect(selOp.ax, selOp.ay, p.x, p.y);
+      updateSelStatus();
+      requestRender();
+    },
+    up() {
+      selOp = null;
+      if (state.selection && (state.selection.w < 1 || state.selection.h < 1)) state.selection = null;
+      updateSelStatus();
+      requestRender();
+    },
+    cancel() { selOp = null; state.selection = null; updateSelStatus(); requestRender(); },
+  },
+  move: {
+    down(px) {
+      if (!paintable()) return;
+      const edit = beginCelEdit();
+      const cel = activeCel();
+      const cx = ctxOf(cel);
+      let region, mode;
+      if (state.selection) { region = { ...state.selection }; mode = 'sel'; }
+      else { region = { x: 0, y: 0, w: doc.w, h: doc.h }; mode = 'layer'; }
+      const float = makeCanvas(region.w, region.h);
+      ctxOf(float).drawImage(cel, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+      cx.clearRect(region.x, region.y, region.w, region.h);
+      moveOp = { edit, mode, region, float, start: px, off: { dx: 0, dy: 0 } };
+      drawMovePreview();
+      docPixelsChanged();
+    },
+    move(px) {
+      if (!moveOp) return;
+      moveOp.off = snapOffset(px.x - moveOp.start.x, px.y - moveOp.start.y);
+      drawMovePreview();
+    },
+    up() {
+      if (!moveOp) return;
+      const { edit, mode, region, float, off } = moveOp;
+      const cel = getCel(edit.li, edit.fi);
+      ctxOf(cel).drawImage(float, region.x + off.dx, region.y + off.dy);
+      if (mode === 'sel') {
+        state.selection = { x: region.x + off.dx, y: region.y + off.dy, w: region.w, h: region.h };
+        clampSelection();
+      }
+      moveOp = null;
+      clearPreview();
+      commitCelEdit(edit);
+    },
+    cancel() {
+      if (!moveOp) return;
+      ctxOf(getCel(moveOp.edit.li, moveOp.edit.fi)).putImageData(moveOp.edit.before, 0, 0);
+      moveOp = null;
+      clearPreview();
+      docPixelsChanged();
+    },
+  },
+  stamp: {
+    hover(px) { drawStampGhost(px); },
+    down(px) {
+      if (!state.stamp) { hint('⚠ Kein Brush gewählt – im Panel „Brushes/Spritesheets“ eine Kachel anklicken.'); return; }
+      if (!paintable()) return;
+      clearPreview();
+      const pos = stampPos(px);
+      stampOp = { edit: beginCelEdit(), lastKey: pos.x + ',' + pos.y };
+      placeStamp(pos);
+    },
+    move(px) {
+      if (!stampOp) { drawStampGhost(px); return; }
+      const pos = stampPos(px);
+      const key = pos.x + ',' + pos.y;
+      if (key !== stampOp.lastKey) { stampOp.lastKey = key; placeStamp(pos); }
+    },
+    up() { if (!stampOp) return; commitCelEdit(stampOp.edit); stampOp = null; },
+    cancel() {
+      if (!stampOp) return;
+      ctxOf(getCel(stampOp.edit.li, stampOp.edit.fi)).putImageData(stampOp.edit.before, 0, 0);
+      stampOp = null; docPixelsChanged();
+    },
+  },
+  hand: {},
+};
+
+function shapeDown(px, ev) {
+  if (!paintable()) return;
+  shapeOp = { start: px, cur: px, color: ev.button === 2 ? state.bg : state.fg };
+  drawShapePreview();
+}
+function shapeMove(px, ev) {
+  if (!shapeOp) return;
+  shapeOp.cur = constrainShape(state.tool, shapeOp.start, px, ev.shiftKey);
+  drawShapePreview();
+}
+function shapeUp() {
+  if (!shapeOp) return;
+  const rects = clipRects(mirrorRects(computeShapeRects(state.tool, shapeOp.start, shapeOp.cur)));
+  clearPreview();
+  const edit = beginCelEdit();
+  paintRects(activeCel(), rects, { color: shapeOp.color });
+  commitCelEdit(edit);
+  shapeOp = null;
+}
+function shapeCancel() { shapeOp = null; clearPreview(); }
+function drawShapePreview() {
+  const pc = ctxOf(previewCanvas);
+  pc.clearRect(0, 0, doc.w, doc.h);
+  const rects = clipRects(mirrorRects(computeShapeRects(state.tool, shapeOp.start, shapeOp.cur)));
+  pc.fillStyle = rgbaCss(shapeOp.color);
+  for (const r of rects) pc.fillRect(r.x, r.y, r.w, r.h);
+  previewAlpha = 1;
+  requestRender();
+}
+
+function computeSelRect(ax, ay, bx, by) {
+  const minX = Math.min(ax, bx), maxX = Math.max(ax, bx);
+  const minY = Math.min(ay, by), maxY = Math.max(ay, by);
+  let x0, y0, x1, y1;
+  if (state.snap) {
+    x0 = Math.floor(minX / doc.tileW) * doc.tileW;
+    y0 = Math.floor(minY / doc.tileH) * doc.tileH;
+    x1 = Math.ceil(maxX / doc.tileW) * doc.tileW;
+    y1 = Math.ceil(maxY / doc.tileH) * doc.tileH;
+    if (x1 <= x0) x1 = x0 + doc.tileW;
+    if (y1 <= y0) y1 = y0 + doc.tileH;
+  } else {
+    x0 = Math.floor(minX); y0 = Math.floor(minY);
+    x1 = Math.floor(maxX) + 1; y1 = Math.floor(maxY) + 1;
+  }
+  x0 = clamp(x0, 0, doc.w); y0 = clamp(y0, 0, doc.h);
+  x1 = clamp(x1, 0, doc.w); y1 = clamp(y1, 0, doc.h);
+  if (x1 - x0 < 1 || y1 - y0 < 1) return null;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+function drawMovePreview() {
+  const pc = ctxOf(previewCanvas);
+  pc.clearRect(0, 0, doc.w, doc.h);
+  pc.drawImage(moveOp.float, moveOp.region.x + moveOp.off.dx, moveOp.region.y + moveOp.off.dy);
+  previewAlpha = 1;
+  requestRender();
+}
+
+function stampPos(px) {
+  if (state.snap) {
+    return {
+      x: Math.floor(px.x / doc.tileW) * doc.tileW,
+      y: Math.floor(px.y / doc.tileH) * doc.tileH,
+    };
+  }
+  return { x: px.x, y: px.y };
+}
+function placeStamp(pos) {
+  const st = state.stamp;
+  const cx = ctxOf(activeCel());
+  cx.save();
+  if (state.selection) {
+    const s = state.selection;
+    cx.beginPath(); cx.rect(s.x, s.y, s.w, s.h); cx.clip();
+  }
+  if (state.stampOverwrite) cx.clearRect(pos.x, pos.y, st.canvas.width, st.canvas.height);
+  cx.drawImage(st.canvas, pos.x, pos.y);
+  cx.restore();
+  docPixelsChanged();
+}
+function drawStampGhost(px) {
+  const pc = ctxOf(previewCanvas);
+  pc.clearRect(0, 0, doc.w, doc.h);
+  if (state.stamp && px) {
+    const p = stampPos(px);
+    pc.drawImage(state.stamp.canvas, p.x, p.y);
+    previewAlpha = 0.55;
+  }
+  requestRender();
+}
+
+function pickColorAt(px, toBg) {
+  if (px.x < 0 || px.y < 0 || px.x >= doc.w || px.y >= doc.h) return;
+  const comp = compositeFrame(state.activeFrame);
+  const d = ctxOf(comp).getImageData(px.x, px.y, 1, 1).data;
+  if (d[3] === 0) { hint('Pipette: Pixel ist transparent.'); return; }
+  const c = { r: d[0], g: d[1], b: d[2], a: d[3] };
+  if (toBg) setBgColor(c); else setFgColor(c);
+}
+
+/* ---------------- Zeiger-Ereignisse ---------------- */
+const pointerState = { mode: null, button: 0, panStart: null };
+let spaceDown = false;
+
+mainCanvas.addEventListener('contextmenu', ev => ev.preventDefault());
+rulerTop.addEventListener('contextmenu', ev => ev.preventDefault());
+rulerLeft.addEventListener('contextmenu', ev => ev.preventDefault());
+
+mainCanvas.addEventListener('pointerdown', ev => {
+  ev.preventDefault();
+  if (pointerState.mode) return;
+  mainCanvas.setPointerCapture(ev.pointerId);
+  const px = docPixelFromEvent(ev);
+  if (ev.button === 1 || spaceDown || state.tool === 'hand') {
+    pointerState.mode = 'pan';
+    pointerState.panStart = { x: ev.clientX, y: ev.clientY, panX: view.panX, panY: view.panY };
+    return;
+  }
+  if (ev.shiftKey && state.show.guides && !['line', 'rect', 'ellipse'].includes(state.tool)) {
+    const g = findGuideNear(ev);
+    if (g) { pointerState.mode = 'guide'; dragGuide = g; requestRender(); return; }
+  }
+  if (ev.altKey && state.tool !== 'hand') {
+    pointerState.mode = 'eyedrop';
+    pickColorAt(px, ev.button === 2);
+    return;
+  }
+  if (ev.button === 2 && !['pencil', 'eraser', 'fill', 'line', 'rect', 'ellipse', 'eyedropper'].includes(state.tool)) return;
+  const tool = TOOLS[state.tool];
+  if (tool && tool.down) {
+    pointerState.mode = 'tool';
+    pointerState.button = ev.button;
+    tool.down(px, ev);
+  }
+});
+
+mainCanvas.addEventListener('pointermove', ev => {
+  const px = docPixelFromEvent(ev);
+  hoverPixel = px;
+  $('#stPos').textContent = `x: ${px.x}, y: ${px.y}`;
+  if (pointerState.mode === 'pan') {
+    const p = pointerState.panStart;
+    view.panX = p.panX + (ev.clientX - p.x);
+    view.panY = p.panY + (ev.clientY - p.y);
+    requestRender();
+    return;
+  }
+  if (pointerState.mode === 'guide' && dragGuide) {
+    const pos = docPosFromEvent(ev);
+    const raw = dragGuide.axis === 'h' ? pos.y : pos.x;
+    dragGuide.pos = snapGuidePosAxis(raw, dragGuide.axis);
+    requestRender();
+    return;
+  }
+  if (pointerState.mode === 'eyedrop') {
+    if (ev.buttons) pickColorAt(px, (ev.buttons & 2) !== 0);
+    return;
+  }
+  if (pointerState.mode === 'tool') {
+    const tool = TOOLS[state.tool];
+    if (tool && tool.move) tool.move(px, ev);
+    requestRender();
+    return;
+  }
+  const tool = TOOLS[state.tool];
+  if (tool && tool.hover) tool.hover(px);
+  requestRender();
+});
+
+mainCanvas.addEventListener('pointerup', ev => {
+  if (pointerState.mode === 'guide' && dragGuide) {
+    const max = dragGuide.axis === 'h' ? doc.h : doc.w;
+    if (dragGuide.pos < 0 || dragGuide.pos > max) {
+      state.guides = state.guides.filter(g => g !== dragGuide);
+    }
+    dragGuide = null;
+    pointerState.mode = null;
+    requestRender();
+    return;
+  }
+  if (pointerState.mode === 'tool') {
+    const tool = TOOLS[state.tool];
+    if (tool && tool.up) tool.up(docPixelFromEvent(ev), ev);
+  }
+  pointerState.mode = null;
+});
+
+mainCanvas.addEventListener('pointerleave', () => {
+  hoverPixel = null;
+  if (!pointerState.mode && state.tool === 'stamp') clearPreview();
+  requestRender();
+});
+
+mainCanvas.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  const { sx, sy } = screenFromEvent(ev);
+  zoomStep(ev.deltaY < 0 ? 1 : -1, sx, sy);
+}, { passive: false });
+
+/* ---------------- Hilfslinien ---------------- */
+function snapGuidePosAxis(raw, axis) {
+  if (state.snap) {
+    const t = axis === 'h' ? doc.tileH : doc.tileW;
+    return Math.round(raw / t) * t;
+  }
+  return Math.round(raw);
+}
+function findGuideNear(ev) {
+  const { sx, sy } = screenFromEvent(ev);
+  const tol = 5;
+  for (const g of state.guides) {
+    const s = g.axis === 'h' ? view.panY + g.pos * view.zoom : view.panX + g.pos * view.zoom;
+    const d = g.axis === 'h' ? Math.abs(sy - s) : Math.abs(sx - s);
+    if (d <= tol) return g;
+  }
+  return null;
+}
+function startGuideFromRuler(rulerEl, axis) {
+  rulerEl.addEventListener('pointerdown', ev => {
+    ev.preventDefault();
+    if (!state.show.guides) { hint('Hilfslinien sind ausgeblendet („Hilfslinien“ aktivieren).'); return; }
+    rulerEl.setPointerCapture(ev.pointerId);
+    const g = { axis, pos: 0 };
+    state.guides.push(g);
+    dragGuide = g;
+    const onMove = e => {
+      const r = mainCanvas.getBoundingClientRect();
+      const raw = axis === 'h' ? (e.clientY - r.top - view.panY) / view.zoom
+                               : (e.clientX - r.left - view.panX) / view.zoom;
+      g.pos = snapGuidePosAxis(raw, axis);
+      requestRender();
+    };
+    onMove(ev);
+    const onUp = e => {
+      rulerEl.removeEventListener('pointermove', onMove);
+      rulerEl.removeEventListener('pointerup', onUp);
+      const max = axis === 'h' ? doc.h : doc.w;
+      if (g.pos <= 0 || g.pos >= max) state.guides = state.guides.filter(x => x !== g);
+      dragGuide = null;
+      state.dirtyDoc = true;
+      requestRender();
+    };
+    rulerEl.addEventListener('pointermove', onMove);
+    rulerEl.addEventListener('pointerup', onUp);
+  });
+}
+startGuideFromRuler(rulerTop, 'h');
+startGuideFromRuler(rulerLeft, 'v');
+
+/* ---------------- Auswahl-Operationen ---------------- */
+function selectionOrNull() {
+  if (!state.selection) { hint('⚠ Keine Auswahl vorhanden (Werkzeug „Auswahl“, Taste M).'); return null; }
+  return state.selection;
+}
+function copySelection() {
+  const s = selectionOrNull();
+  if (!s) return null;
+  const c = makeCanvas(s.w, s.h);
+  ctxOf(c).drawImage(activeCel(), s.x, s.y, s.w, s.h, 0, 0, s.w, s.h);
+  state.clipboard = { canvas: c, name: 'Zwischenablage' };
+  hint(`Kopiert: ${s.w}×${s.h} px.`);
+  return state.clipboard;
+}
+function cutSelection() {
+  if (!copySelection()) return;
+  deleteSelection();
+}
+function deleteSelection() {
+  const s = selectionOrNull();
+  if (!s || !paintable()) return;
+  const edit = beginCelEdit();
+  ctxOf(activeCel()).clearRect(s.x, s.y, s.w, s.h);
+  commitCelEdit(edit);
+}
+function pasteClipboard() {
+  if (!state.clipboard) { hint('⚠ Zwischenablage ist leer (Strg+C in einer Auswahl).'); return; }
+  state.stamp = { canvas: cloneCanvas(state.clipboard.canvas), name: state.clipboard.name };
+  setTool('stamp');
+  hint('Einfügen: Stempel platzieren (Klick auf die Leinwand).');
+  renderToolOptions();
+}
+function selectionToBrush() {
+  const s = selectionOrNull();
+  if (!s) return;
+  const c = makeCanvas(s.w, s.h);
+  ctxOf(c).drawImage(compositeFrame(state.activeFrame), s.x, s.y, s.w, s.h, 0, 0, s.w, s.h);
+  state.stamp = { canvas: c, name: 'Auswahl' };
+  setTool('stamp');
+  renderToolOptions();
+  hint('Auswahl ist jetzt der aktive Stempel-Brush.');
+}
+
+/* ---------------- Tastatur ---------------- */
+const TOOL_KEYS = {
+  b: 'pencil', e: 'eraser', g: 'fill', i: 'eyedropper', l: 'line',
+  u: 'rect', o: 'ellipse', m: 'select', v: 'move', s: 'stamp', h: 'hand',
+};
+
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input, textarea, select')) return;
+  if (document.querySelector('dialog[open]')) return;
+  const k = ev.key.toLowerCase();
+  if (ev.ctrlKey || ev.metaKey) {
+    if (k === 'z') { ev.preventDefault(); ev.shiftKey ? doRedo() : doUndo(); }
+    else if (k === 'y') { ev.preventDefault(); doRedo(); }
+    else if (k === 'a') { ev.preventDefault(); state.selection = { x: 0, y: 0, w: doc.w, h: doc.h }; updateSelStatus(); requestRender(); }
+    else if (k === 'd') { ev.preventDefault(); state.selection = null; updateSelStatus(); requestRender(); }
+    else if (k === 'c') { ev.preventDefault(); copySelection(); }
+    else if (k === 'x') { ev.preventDefault(); cutSelection(); }
+    else if (k === 'v') { ev.preventDefault(); pasteClipboard(); }
+    else if (k === 's') { ev.preventDefault(); saveProject(); }
+    return;
+  }
+  if (k === ' ') { spaceDown = true; mainCanvas.style.cursor = 'grab'; ev.preventDefault(); return; }
+  if (TOOL_KEYS[k]) { setTool(TOOL_KEYS[k]); return; }
+  switch (ev.key) {
+    case 'x': case 'X': swapColors(); break;
+    case '[': state.brushSize = clamp(state.brushSize - 1, 1, 64); renderToolOptions(); requestRender(); break;
+    case ']': state.brushSize = clamp(state.brushSize + 1, 1, 64); renderToolOptions(); requestRender(); break;
+    case '+': zoomStep(1); break;
+    case '-': zoomStep(-1); break;
+    case '0': fitView(); break;
+    case '?': $('#dlgHelp').showModal(); break;
+    case 'Enter': togglePlay(); break;
+    case 'Delete': case 'Backspace': deleteSelection(); ev.preventDefault(); break;
+    case 'Escape': {
+      const tool = TOOLS[state.tool];
+      if (pointerState.mode === 'tool' && tool && tool.cancel) { tool.cancel(); pointerState.mode = null; }
+      else if (state.selection) { state.selection = null; updateSelStatus(); requestRender(); }
+      break;
+    }
+  }
+});
+document.addEventListener('keyup', ev => {
+  if (ev.key === ' ') { spaceDown = false; mainCanvas.style.cursor = ''; }
+});
+
+window.addEventListener('resize', requestRender);
+window.addEventListener('beforeunload', ev => {
+  if (state.dirtyDoc) { ev.preventDefault(); ev.returnValue = ''; }
+});
+
+/* ============================================================
+   UI-Aufbau: Werkzeugoptionen, Farben, Ebenen, Timeline, Assets
+   ============================================================ */
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k === 'style') e.style.cssText = v;
+    else if (k === 'dataset') Object.assign(e.dataset, v);
+    else if (k in e) { try { e[k] = v; } catch (_) { e.setAttribute(k, v); } }
+    else e.setAttribute(k, v);
+  }
+  for (const kid of kids) {
+    if (kid === null || kid === undefined) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+function mkToggle(label, get, set, title) {
+  return h('button', {
+    class: get() ? 'toggled' : '', title: title || '',
+    onclick: () => { set(!get()); renderToolOptions(); requestRender(); },
+  }, label);
+}
+
+const TOOL_NAMES = {
+  pencil: 'Stift', eraser: 'Radierer', fill: 'Füllen', eyedropper: 'Pipette',
+  line: 'Linie', rect: 'Rechteck', ellipse: 'Ellipse', select: 'Auswahl',
+  move: 'Verschieben', stamp: 'Stempel', hand: 'Hand',
+};
+
+function setTool(name) {
+  if (pointerState.mode === 'tool') {
+    const t = TOOLS[state.tool];
+    if (t && t.cancel) t.cancel();
+    pointerState.mode = null;
+  }
+  state.tool = name;
+  $$('#toolcol .tool').forEach(b => b.classList.toggle('toggled', b.dataset.tool === name));
+  if (name !== 'stamp') clearPreview();
+  hint(TOOL_HINTS[name] || '');
+  renderToolOptions();
+  requestRender();
+}
+
+function renderToolOptions() {
+  const bar = $('#toolOptions');
+  bar.textContent = '';
+  const t = state.tool;
+  const add = (...els) => els.forEach(e => bar.append(e));
+  const opt = (label, ctl) => h('span', { class: 'opt' }, h('span', { class: 'optlabel' }, label), ctl);
+  add(h('b', {}, TOOL_NAMES[t] || t));
+
+  if (['pencil', 'eraser', 'line', 'rect', 'ellipse'].includes(t)) {
+    add(opt('Größe', h('input', {
+      type: 'number', min: 1, max: 64, value: state.brushSize,
+      onchange: e => { state.brushSize = clamp(parseInt(e.target.value, 10) || 1, 1, 64); requestRender(); },
+    })));
+  }
+  if (['rect', 'ellipse'].includes(t)) {
+    add(mkToggle('Gefüllt', () => state.shapeFill, v => state.shapeFill = v, 'Form ausfüllen statt Umriss'));
+  }
+  if (['pencil', 'eraser', 'line', 'rect', 'ellipse'].includes(t)) {
+    add(mkToggle('Spiegel X', () => state.mirrorX, v => state.mirrorX = v, 'Symmetrisch zur vertikalen Mittelachse zeichnen'));
+    add(mkToggle('Spiegel Y', () => state.mirrorY, v => state.mirrorY = v, 'Symmetrisch zur horizontalen Mittelachse zeichnen'));
+  }
+  if (t === 'fill') {
+    add(mkToggle('Global ersetzen', () => state.fillGlobal, v => state.fillGlobal = v,
+      'Alle Pixel gleicher Farbe ersetzen statt nur zusammenhängende Fläche'));
+  }
+  if (t === 'select') {
+    add(h('button', { onclick: selectionToBrush, title: 'Auswahl als Stempel-Brush übernehmen' }, 'Auswahl → Brush'));
+    add(h('button', { onclick: copySelection }, 'Kopieren'));
+    add(h('button', { onclick: cutSelection }, 'Ausschneiden'));
+    add(h('button', { onclick: deleteSelection }, 'Löschen'));
+    add(h('button', { onclick: () => { state.selection = null; updateSelStatus(); requestRender(); } }, 'Aufheben'));
+  }
+  if (t === 'stamp') {
+    const chip = h('span', { id: 'stampChip' });
+    if (state.stamp) {
+      const c = state.stamp.canvas;
+      const scale = Math.min(3, 40 / Math.max(c.width, c.height));
+      const pv = makeCanvas(Math.max(1, Math.round(c.width * scale)), Math.max(1, Math.round(c.height * scale)));
+      const px = ctxOf(pv);
+      px.imageSmoothingEnabled = false;
+      px.drawImage(c, 0, 0, pv.width, pv.height);
+      chip.append(pv, h('span', {}, `${state.stamp.name} (${c.width}×${c.height})`));
+    } else {
+      chip.append(h('span', { style: 'color:var(--muted)' }, 'Kein Brush gewählt → Panel „Brushes/Spritesheets“'));
+    }
+    add(chip);
+    add(mkToggle('Deckend', () => state.stampOverwrite, v => state.stampOverwrite = v,
+      'Zielbereich vor dem Stempeln leeren (Transparenz überschreiben)'));
+    add(h('button', { onclick: selectionToBrush, title: 'Aktuelle Auswahl als Brush übernehmen' }, 'Auswahl → Brush'));
+  }
+  if (t === 'move') {
+    add(h('span', { style: 'color:var(--muted)' }, 'Ohne Auswahl wird die ganze Ebene verschoben.'));
+  }
+  if (t === 'hand') {
+    add(h('span', { style: 'color:var(--muted)' }, 'Ansicht verschieben – Zoom mit Mausrad.'));
+  }
+}
+
+/* ---------------- Farben & Palette ---------------- */
+function updateColorUI() {
+  $('#fgSwatch').style.background = rgbaCss(state.fg);
+  $('#bgSwatch').style.background = rgbaCss(state.bg);
+  $('#inpHex').value = rgbToHex(state.fg);
+  $('#inpColorNative').value = rgbToHex(state.fg);
+  $('#inpAlpha').value = state.fg.a;
+  $('#lblAlpha').textContent = Math.round(state.fg.a / 255 * 100) + ' %';
+  renderPalette();
+}
+function setFgColor(c) { state.fg = { ...c }; updateColorUI(); }
+function setBgColor(c) { state.bg = { ...c }; updateColorUI(); }
+function swapColors() { const t = state.fg; state.fg = state.bg; state.bg = t; updateColorUI(); }
+
+function swatchToColor(s) {
+  const hex = s.replace('#', '');
+  const n = parseInt(hex.slice(0, 6), 16);
+  const a = hex.length >= 8 ? parseInt(hex.slice(6, 8), 16) : 255;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a };
+}
+function colorToSwatch(c) {
+  let s = rgbToHex(c);
+  if (c.a < 255) s += c.a.toString(16).padStart(2, '0');
+  return s;
+}
+function renderPalette() {
+  const grid = $('#palGrid');
+  grid.textContent = '';
+  state.palette.forEach((sw, i) => {
+    const col = swatchToColor(sw);
+    const cell = h('div', {
+      class: 'swatch' + (sameColor(col, state.fg) ? ' active' : ''),
+      title: sw,
+      onclick: ev => {
+        if (ev.altKey) { state.palette.splice(i, 1); state.paletteId = 'custom'; $('#selPalette').value = 'custom'; renderPalette(); }
+        else setFgColor(col);
+      },
+      oncontextmenu: ev => { ev.preventDefault(); setBgColor(col); },
+    }, h('span', { class: 'inner', style: `background:${rgbaCss(col)}` }));
+    grid.append(cell);
+  });
+}
+function paletteFromImage() {
+  const comp = compositeFrame(state.activeFrame);
+  const d = ctxOf(comp).getImageData(0, 0, doc.w, doc.h).data;
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(colorToSwatch({ r: d[i], g: d[i + 1], b: d[i + 2], a: 255 }));
+    if (out.length >= 64) break;
+  }
+  if (!out.length) { hint('Bild enthält keine sichtbaren Pixel.'); return; }
+  state.palette = out;
+  state.paletteId = 'custom';
+  $('#selPalette').value = 'custom';
+  renderPalette();
+}
+
+/* ---------------- Ebenen-Panel ---------------- */
+let layerThumbEls = [];
+function renderLayers() {
+  const list = $('#layerList');
+  list.textContent = '';
+  layerThumbEls = [];
+  doc.layers.forEach((L, i) => {
+    const thumb = makeCanvas(30, 24);
+    layerThumbEls.push({ cv: thumb, li: i });
+    const row = h('div', {
+      class: 'layerrow' + (i === state.activeLayer ? ' active' : ''),
+      onclick: () => { state.activeLayer = i; renderLayers(); requestRender(); },
+    },
+      h('span', {
+        class: 'icon' + (L.visible ? ' on' : ''), title: 'Sichtbarkeit',
+        onclick: ev => { ev.stopPropagation(); L.visible = !L.visible; state.dirtyDoc = true; renderLayers(); docPixelsChanged(); },
+      }, L.visible ? '👁' : '—'),
+      h('span', {
+        class: 'icon' + (L.locked ? ' on' : ''), title: 'Sperren',
+        onclick: ev => { ev.stopPropagation(); L.locked = !L.locked; state.dirtyDoc = true; renderLayers(); },
+      }, L.locked ? '🔒' : '🔓'),
+      thumb,
+      h('span', {
+        class: 'lname', title: 'Doppelklick: umbenennen',
+        ondblclick: ev => {
+          ev.stopPropagation();
+          const name = prompt('Name der Ebene:', L.name);
+          if (name) { L.name = name; state.dirtyDoc = true; renderLayers(); }
+        },
+      }, L.name),
+      h('input', {
+        type: 'range', min: 0, max: 100, value: Math.round(L.opacity * 100), title: 'Deckkraft',
+        onclick: ev => ev.stopPropagation(),
+        oninput: ev => { L.opacity = (+ev.target.value) / 100; state.dirtyDoc = true; requestRender(); },
+      }),
+    );
+    list.append(row);
+  });
+  updateThumbs();
+}
+
+function insertLayerUndoable(layer, index, label) {
+  pushUndo({
+    undo() { doc.layers.splice(index, 1); },
+    redo() { doc.layers.splice(index, 0, layer); },
+  });
+  doc.layers.splice(index, 0, layer);
+  state.activeLayer = index;
+  docPixelsChanged();
+  refreshAllUI();
+}
+function addLayer() {
+  const L = makeLayer('Ebene ' + (doc.layers.length + 1), doc.w, doc.h, doc.frames.length);
+  insertLayerUndoable(L, state.activeLayer, 'Ebene neu');
+}
+function dupLayer() {
+  const src = activeLayer();
+  const L = {
+    id: uid(), name: src.name + ' Kopie', visible: src.visible, opacity: src.opacity, locked: false,
+    cels: src.cels.map(cloneCanvas),
+  };
+  insertLayerUndoable(L, state.activeLayer, 'Ebene duplizieren');
+}
+function delLayer() {
+  if (doc.layers.length <= 1) { hint('⚠ Die letzte Ebene kann nicht gelöscht werden.'); return; }
+  const index = state.activeLayer;
+  const layer = doc.layers[index];
+  pushUndo({
+    undo() { doc.layers.splice(index, 0, layer); },
+    redo() { doc.layers.splice(index, 1); },
+  });
+  doc.layers.splice(index, 1);
+  state.activeLayer = clamp(index, 0, doc.layers.length - 1);
+  docPixelsChanged();
+  refreshAllUI();
+}
+function moveLayer(dir) {
+  const i = state.activeLayer, j = i + dir;
+  if (j < 0 || j >= doc.layers.length) return;
+  const swap = () => { const t = doc.layers[i]; doc.layers[i] = doc.layers[j]; doc.layers[j] = t; };
+  pushUndo({ undo: swap, redo: swap });
+  swap();
+  state.activeLayer = j;
+  docPixelsChanged();
+  refreshAllUI();
+}
+function mergeDown() {
+  const i = state.activeLayer;
+  if (i >= doc.layers.length - 1) { hint('⚠ Keine Ebene darunter zum Vereinen.'); return; }
+  const top = doc.layers[i];
+  const below = doc.layers[i + 1];
+  const belowBefore = below.cels.map(cloneCanvas);
+  const apply = () => {
+    below.cels.forEach((cel, fi) => {
+      const x = ctxOf(cel);
+      x.globalAlpha = top.opacity;
+      x.drawImage(top.cels[fi], 0, 0);
+      x.globalAlpha = 1;
+    });
+    doc.layers.splice(i, 1);
+  };
+  pushUndo({
+    undo() {
+      below.cels = belowBefore.map(cloneCanvas);
+      doc.layers.splice(i, 0, top);
+    },
+    redo: apply,
+  });
+  apply();
+  state.activeLayer = clamp(i, 0, doc.layers.length - 1);
+  docPixelsChanged();
+  refreshAllUI();
+}
+
+/* ---------------- Timeline / Frames ---------------- */
+let frameCellEls = [];
+let frameThumbEls = [];
+function renderFrames() {
+  const strip = $('#framesStrip');
+  strip.textContent = '';
+  frameCellEls = [];
+  frameThumbEls = [];
+  const th = 40;
+  const tw = clamp(Math.round(doc.w / doc.h * th), 16, 96);
+  doc.frames.forEach((f, i) => {
+    const cv = makeCanvas(tw, th);
+    frameThumbEls.push({ cv, fi: i });
+    const cell = h('div', {
+      class: 'framecell' + (i === state.activeFrame ? ' active' : ''),
+      onclick: () => { state.activeFrame = i; playAccum = 0; highlightActiveFrame(); requestRender(); },
+    }, cv, h('span', { class: 'fnum' }, String(i + 1)));
+    frameCellEls.push(cell);
+    strip.append(cell);
+  });
+  $('#inpFrameDur').value = doc.frames[state.activeFrame].duration;
+  updateThumbs();
+}
+function highlightActiveFrame() {
+  frameCellEls.forEach((c, i) => c.classList.toggle('active', i === state.activeFrame));
+  if (doc.frames[state.activeFrame]) $('#inpFrameDur').value = doc.frames[state.activeFrame].duration;
+  updateThumbs(); // Ebenen-Thumbs zeigen den aktiven Frame
+}
+function updateThumbs() {
+  for (const { cv, fi } of frameThumbEls) {
+    if (fi >= doc.frames.length) continue;
+    const x = ctxOf(cv);
+    x.clearRect(0, 0, cv.width, cv.height);
+    const comp = compositeFrame(fi);
+    const k = Math.min(cv.width / doc.w, cv.height / doc.h);
+    const w = doc.w * k, hh = doc.h * k;
+    x.drawImage(comp, (cv.width - w) / 2, (cv.height - hh) / 2, w, hh);
+  }
+  for (const { cv, li } of layerThumbEls) {
+    if (li >= doc.layers.length) continue;
+    const x = ctxOf(cv);
+    x.clearRect(0, 0, cv.width, cv.height);
+    const cel = doc.layers[li].cels[state.activeFrame];
+    const k = Math.min(cv.width / doc.w, cv.height / doc.h);
+    const w = doc.w * k, hh = doc.h * k;
+    x.drawImage(cel, (cv.width - w) / 2, (cv.height - hh) / 2, w, hh);
+  }
+}
+
+function addFrame(duplicate) {
+  const at = state.activeFrame + 1;
+  const dur = doc.frames[state.activeFrame].duration;
+  const cels = doc.layers.map(L => duplicate ? cloneCanvas(L.cels[state.activeFrame]) : makeCanvas(doc.w, doc.h));
+  const frame = { duration: dur };
+  const apply = () => {
+    doc.frames.splice(at, 0, frame);
+    doc.layers.forEach((L, li) => L.cels.splice(at, 0, cels[li]));
+  };
+  pushUndo({
+    undo() {
+      doc.frames.splice(at, 1);
+      doc.layers.forEach(L => L.cels.splice(at, 1));
+    },
+    redo: apply,
+  });
+  apply();
+  state.activeFrame = at;
+  docPixelsChanged();
+  refreshAllUI();
+}
+function delFrame() {
+  if (doc.frames.length <= 1) { hint('⚠ Der letzte Frame kann nicht gelöscht werden.'); return; }
+  const at = state.activeFrame;
+  const frame = doc.frames[at];
+  const cels = doc.layers.map(L => L.cels[at]);
+  pushUndo({
+    undo() {
+      doc.frames.splice(at, 0, frame);
+      doc.layers.forEach((L, li) => L.cels.splice(at, 0, cels[li]));
+    },
+    redo() {
+      doc.frames.splice(at, 1);
+      doc.layers.forEach(L => L.cels.splice(at, 1));
+    },
+  });
+  doc.frames.splice(at, 1);
+  doc.layers.forEach(L => L.cels.splice(at, 1));
+  state.activeFrame = clamp(at, 0, doc.frames.length - 1);
+  docPixelsChanged();
+  refreshAllUI();
+}
+function moveFrame(dir) {
+  const i = state.activeFrame, j = i + dir;
+  if (j < 0 || j >= doc.frames.length) return;
+  const swap = () => {
+    const tf = doc.frames[i]; doc.frames[i] = doc.frames[j]; doc.frames[j] = tf;
+    doc.layers.forEach(L => { const t = L.cels[i]; L.cels[i] = L.cels[j]; L.cels[j] = t; });
+  };
+  pushUndo({ undo: swap, redo: swap });
+  swap();
+  state.activeFrame = j;
+  docPixelsChanged();
+  refreshAllUI();
+}
+function togglePlay() {
+  state.playing = !state.playing;
+  playAccum = 0;
+  $('#btnPlay').textContent = state.playing ? '⏸' : '▶';
+  $('#btnPlay').classList.toggle('toggled', state.playing);
+  requestRender();
+}
+
+/* ---------------- Assets / Sprite-Brushes ---------------- */
+function guessTileSize(img) {
+  for (const t of [48, 32, 24, 16, 8]) {
+    if (img.width % t === 0 && img.height % t === 0 && img.width >= t && img.height >= t) return t;
+  }
+  return 16;
+}
+async function addAssetFromFile(file) {
+  const dataURL = await readFileAsDataURL(file);
+  const img = await loadImage(dataURL);
+  const t = guessTileSize(img);
+  const scale = img.width > 260 ? (img.width > 600 ? 0.5 : 1) : (img.width <= 96 ? 2 : 1);
+  state.assets.push({
+    id: uid(), name: file.name.replace(/\.[a-z]+$/i, ''), dataURL, img,
+    tileW: t, tileH: t, offX: 0, offY: 0, spacing: 0, mode: 'grid', sel: null, scale,
+  });
+  state.dirtyDoc = true;
+  renderAssets();
+  hint(`Spritesheet „${file.name}“ geladen – Kachel anklicken, um sie als Brush zu nutzen.`);
+}
+function setStampFromAsset(asset, rx, ry, rw, rh) {
+  rx = clamp(rx, 0, asset.img.width - 1);
+  ry = clamp(ry, 0, asset.img.height - 1);
+  rw = clamp(rw, 1, asset.img.width - rx);
+  rh = clamp(rh, 1, asset.img.height - ry);
+  const c = makeCanvas(rw, rh);
+  ctxOf(c).drawImage(asset.img, rx, ry, rw, rh, 0, 0, rw, rh);
+  state.stamp = { canvas: c, name: asset.name };
+  state.assets.forEach(a => { if (a !== asset) a.sel = null; });
+  asset.sel = { x: rx, y: ry, w: rw, h: rh };
+  setTool('stamp');
+  renderAssets();
+  hint(`Brush: ${asset.name} (${rw}×${rh}) – auf die Leinwand klicken/ziehen.`);
+}
+function renderAssets() {
+  const list = $('#assetList');
+  list.textContent = '';
+  for (const a of state.assets) {
+    list.append(buildAssetCard(a));
+  }
+}
+function buildAssetCard(a) {
+  const num = (val, min, max, on, title) => h('input', {
+    type: 'number', min, max, value: val, title,
+    onchange: e => { on(clamp(parseInt(e.target.value, 10) || min, min, max)); state.dirtyDoc = true; renderAssets(); },
+  });
+  const view = h('canvas', { class: 'aview' });
+  drawAssetView(a, view);
+  wireAssetView(a, view);
+
+  const presetSel = h('select', {
+    title: 'Raster-Voreinstellung',
+    onchange: e => {
+      const v = parseInt(e.target.value, 10);
+      if (v) { a.tileW = v; a.tileH = v; state.dirtyDoc = true; renderAssets(); }
+    },
+  },
+    h('option', { value: 0 }, 'Raster…'),
+    h('option', { value: 48 }, '48 (RM MZ/MV)'),
+    h('option', { value: 32 }, '32 (RM VX/Ace)'),
+    h('option', { value: 24 }, '24'),
+    h('option', { value: 16 }, '16'),
+    h('option', { value: 8 }, '8'),
+  );
+  const modeBtn = m => h('button', {
+    class: a.mode === m ? 'toggled' : '',
+    title: m === 'grid' ? 'Kacheln per Raster wählen' : 'Beliebigen Pixelbereich aufziehen (für Sprites ohne Raster)',
+    onclick: () => { a.mode = m; state.dirtyDoc = true; renderAssets(); },
+  }, m === 'grid' ? 'Raster' : 'Frei');
+
+  return h('div', { class: 'assetcard' },
+    h('div', { class: 'ahead' },
+      h('span', { class: 'aname', title: a.name }, a.name),
+      h('span', { class: 'amode' }, modeBtn('grid'), ' ', modeBtn('free')),
+      h('button', {
+        title: 'Spritesheet entfernen',
+        onclick: () => {
+          state.assets = state.assets.filter(x => x !== a);
+          state.dirtyDoc = true;
+          renderAssets();
+        },
+      }, '✕'),
+    ),
+    h('div', { class: 'asettings' },
+      presetSel,
+      h('span', {}, 'Kachel'),
+      num(a.tileW, 1, 1024, v => a.tileW = v, 'Kachelbreite'),
+      '×',
+      num(a.tileH, 1, 1024, v => a.tileH = v, 'Kachelhöhe'),
+      h('span', {}, 'Versatz'),
+      num(a.offX, 0, 1024, v => a.offX = v, 'Versatz X'),
+      num(a.offY, 0, 1024, v => a.offY = v, 'Versatz Y'),
+      h('span', {}, 'Abstand'),
+      num(a.spacing, 0, 64, v => a.spacing = v, 'Abstand zwischen Kacheln'),
+      h('select', {
+        title: 'Zoom der Vorschau',
+        onchange: e => { a.scale = parseFloat(e.target.value); renderAssets(); },
+      }, ...[0.25, 0.5, 1, 2, 3, 4].map(z =>
+        h('option', { value: z, selected: Math.abs(a.scale - z) < 0.01 }, (z * 100) + ' %'))),
+    ),
+    h('div', { class: 'aviewwrap' }, view),
+  );
+}
+function drawAssetView(a, cv) {
+  const k = a.scale;
+  cv.width = Math.max(1, Math.round(a.img.width * k));
+  cv.height = Math.max(1, Math.round(a.img.height * k));
+  const x = ctxOf(cv);
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, cv.width, cv.height);
+  x.drawImage(a.img, 0, 0, cv.width, cv.height);
+  if (a.mode === 'grid' && a.tileW >= 2 && a.tileH >= 2) {
+    x.strokeStyle = 'rgba(80,160,255,0.5)';
+    x.lineWidth = 1;
+    x.beginPath();
+    const stepX = (a.tileW + a.spacing) * k, stepY = (a.tileH + a.spacing) * k;
+    for (let gx = a.offX * k; gx <= cv.width + 0.5; gx += stepX) {
+      x.moveTo(Math.round(gx) + 0.5, 0); x.lineTo(Math.round(gx) + 0.5, cv.height);
+    }
+    for (let gy = a.offY * k; gy <= cv.height + 0.5; gy += stepY) {
+      x.moveTo(0, Math.round(gy) + 0.5); x.lineTo(cv.width, Math.round(gy) + 0.5);
+    }
+    x.stroke();
+  }
+  if (a.sel) {
+    x.fillStyle = 'rgba(79,140,255,0.25)';
+    x.fillRect(a.sel.x * k, a.sel.y * k, a.sel.w * k, a.sel.h * k);
+    x.strokeStyle = '#4f8cff';
+    x.lineWidth = 2;
+    x.strokeRect(a.sel.x * k + 1, a.sel.y * k + 1, a.sel.w * k - 2, a.sel.h * k - 2);
+  }
+}
+function assetTileAt(a, ix, iy) {
+  const tx = Math.floor((ix - a.offX) / (a.tileW + a.spacing));
+  const ty = Math.floor((iy - a.offY) / (a.tileH + a.spacing));
+  return {
+    tx: Math.max(0, tx), ty: Math.max(0, ty),
+  };
+}
+function wireAssetView(a, cv) {
+  let drag = null;
+  const imgPos = ev => {
+    const r = cv.getBoundingClientRect();
+    return {
+      x: clamp(Math.floor((ev.clientX - r.left) / a.scale), 0, a.img.width - 1),
+      y: clamp(Math.floor((ev.clientY - r.top) / a.scale), 0, a.img.height - 1),
+    };
+  };
+  const updateSel = (p0, p1) => {
+    if (a.mode === 'grid') {
+      const t0 = assetTileAt(a, p0.x, p0.y), t1 = assetTileAt(a, p1.x, p1.y);
+      const tx0 = Math.min(t0.tx, t1.tx), tx1 = Math.max(t0.tx, t1.tx);
+      const ty0 = Math.min(t0.ty, t1.ty), ty1 = Math.max(t0.ty, t1.ty);
+      const x = a.offX + tx0 * (a.tileW + a.spacing);
+      const y = a.offY + ty0 * (a.tileH + a.spacing);
+      const w = (tx1 - tx0 + 1) * (a.tileW + a.spacing) - a.spacing;
+      const hh = (ty1 - ty0 + 1) * (a.tileH + a.spacing) - a.spacing;
+      a.sel = {
+        x: clamp(x, 0, a.img.width - 1),
+        y: clamp(y, 0, a.img.height - 1),
+        w: clamp(w, 1, a.img.width - clamp(x, 0, a.img.width - 1)),
+        h: clamp(hh, 1, a.img.height - clamp(y, 0, a.img.height - 1)),
+      };
+    } else {
+      const x0 = Math.min(p0.x, p1.x), y0 = Math.min(p0.y, p1.y);
+      a.sel = { x: x0, y: y0, w: Math.abs(p1.x - p0.x) + 1, h: Math.abs(p1.y - p0.y) + 1 };
+    }
+    drawAssetView(a, cv);
+  };
+  cv.addEventListener('contextmenu', ev => ev.preventDefault());
+  cv.addEventListener('pointerdown', ev => {
+    ev.preventDefault();
+    cv.setPointerCapture(ev.pointerId);
+    drag = imgPos(ev);
+    updateSel(drag, drag);
+  });
+  cv.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    updateSel(drag, imgPos(ev));
+  });
+  cv.addEventListener('pointerup', ev => {
+    if (!drag) return;
+    updateSel(drag, imgPos(ev));
+    drag = null;
+    const s = a.sel;
+    setStampFromAsset(a, s.x, s.y, s.w, s.h);
+  });
+}
+
+/* ---------------- Leinwandgröße ändern ---------------- */
+function resizeDoc(nw, nh, anchor, rescale) {
+  const ow = doc.w, oh = doc.h;
+  if (nw === ow && nh === oh && !rescale) return;
+  const ax = anchor[1] === 'l' ? 0 : anchor[1] === 'r' ? 1 : 0.5;
+  const ay = anchor[0] === 't' ? 0 : anchor[0] === 'b' ? 1 : 0.5;
+  const offX = Math.round((nw - ow) * ax);
+  const offY = Math.round((nh - oh) * ay);
+  const oldCels = doc.layers.map(L => L.cels.slice());
+  const newCels = doc.layers.map(L => L.cels.map(old => {
+    const c = makeCanvas(nw, nh);
+    const x = ctxOf(c);
+    x.imageSmoothingEnabled = false;
+    if (rescale) x.drawImage(old, 0, 0, nw, nh);
+    else x.drawImage(old, offX, offY);
+    return c;
+  }));
+  const apply = (w2, h2, cels) => {
+    doc.w = w2; doc.h = h2;
+    doc.layers.forEach((L, li) => { L.cels = cels[li].slice(); });
+    previewCanvas = makeCanvas(w2, h2);
+    state.selection = null;
+    updateSelStatus();
+  };
+  pushUndo({
+    undo() { apply(ow, oh, oldCels); },
+    redo() { apply(nw, nh, newCels); },
+  });
+  apply(nw, nh, newCels);
+  docPixelsChanged();
+  fitView();
+  refreshAllUI();
+}
+
+/* ---------------- Projekt speichern / laden ---------------- */
+function serializeProject() {
+  return {
+    app: 'pixelwerk', version: 1,
+    name: doc.name, width: doc.w, height: doc.h,
+    tileW: doc.tileW, tileH: doc.tileH,
+    frames: doc.frames.map(f => ({ duration: f.duration })),
+    layers: doc.layers.map(L => ({
+      name: L.name, visible: L.visible, opacity: L.opacity, locked: L.locked,
+      cels: L.cels.map(c => c.toDataURL('image/png')),
+    })),
+    palette: state.palette.slice(),
+    paletteId: state.paletteId,
+    guides: state.guides.map(g => ({ axis: g.axis, pos: g.pos })),
+    snap: state.snap,
+    show: { ...state.show },
+    assets: state.assets.map(a => ({
+      name: a.name, tileW: a.tileW, tileH: a.tileH, offX: a.offX, offY: a.offY,
+      spacing: a.spacing, mode: a.mode, data: a.dataURL,
+    })),
+    activeLayer: state.activeLayer,
+    activeFrame: state.activeFrame,
+  };
+}
+function saveProject() {
+  const json = JSON.stringify(serializeProject());
+  downloadBlob(new Blob([json], { type: 'application/json' }), (doc.name || 'pixelart') + '.pixelwerk.json');
+  state.dirtyDoc = false;
+  hint('Projekt gespeichert (Download). Enthält Ebenen, Frames, Palette, Hilfslinien und Brushes.');
+}
+async function loadProjectData(data) {
+  if (!data || data.app !== 'pixelwerk' || !Array.isArray(data.layers)) {
+    throw new Error('Das ist keine PixelWerk-Projektdatei.');
+  }
+  const w = data.width, h = data.height;
+  const layers = [];
+  for (const L of data.layers) {
+    const cels = [];
+    for (const src of L.cels) {
+      const img = await loadImage(src);
+      const c = makeCanvas(w, h);
+      ctxOf(c).drawImage(img, 0, 0);
+      cels.push(c);
+    }
+    layers.push({
+      id: uid(), name: L.name || 'Ebene', visible: L.visible !== false,
+      opacity: L.opacity === undefined ? 1 : L.opacity, locked: !!L.locked, cels,
+    });
+  }
+  const assets = [];
+  for (const a of (data.assets || [])) {
+    try {
+      const img = await loadImage(a.data);
+      assets.push({
+        id: uid(), name: a.name, dataURL: a.data, img,
+        tileW: a.tileW || 16, tileH: a.tileH || 16, offX: a.offX || 0, offY: a.offY || 0,
+        spacing: a.spacing || 0, mode: a.mode || 'grid', sel: null,
+        scale: img.width > 260 ? 0.5 : 1,
+      });
+    } catch (e) { /* Asset überspringen */ }
+  }
+  doc = {
+    w, h,
+    tileW: data.tileW || 16, tileH: data.tileH || 16,
+    name: data.name || 'pixelart',
+    layers,
+    frames: (data.frames && data.frames.length ? data.frames : [{ duration: 150 }])
+      .map(f => ({ duration: f.duration || 150 })),
+  };
+  state.assets = assets;
+  state.palette = Array.isArray(data.palette) && data.palette.length ? data.palette : PALETTES.db32.slice();
+  state.paletteId = data.paletteId || 'custom';
+  state.guides = (data.guides || []).map(g => ({ axis: g.axis, pos: g.pos }));
+  if (typeof data.snap === 'boolean') state.snap = data.snap;
+  if (data.show) Object.assign(state.show, data.show);
+  state.activeLayer = clamp(data.activeLayer || 0, 0, doc.layers.length - 1);
+  state.activeFrame = clamp(data.activeFrame || 0, 0, doc.frames.length - 1);
+  state.selection = null;
+  state.stamp = null;
+  undoStack.length = 0;
+  redoStack.length = 0;
+  state.dirtyDoc = false;
+  previewCanvas = makeCanvas(w, h);
+  $('#inpTileW').value = doc.tileW;
+  $('#inpTileH').value = doc.tileH;
+  $('#selPalette').value = ['db32', 'pico8'].includes(state.paletteId) ? state.paletteId : 'custom';
+  fitView();
+  refreshAllUI();
+  hint(`Projekt „${doc.name}“ geladen.`);
+}
+async function loadProjectFile(file) {
+  try {
+    const text = await file.text();
+    await loadProjectData(JSON.parse(text));
+  } catch (e) {
+    alert('Projekt konnte nicht geladen werden: ' + e.message);
+  }
+}
+
+/* ---------------- PNG-Export ---------------- */
+function scaleCanvasBy(src, k) {
+  if (k === 1) return src;
+  const c = makeCanvas(src.width * k, src.height * k);
+  const x = ctxOf(c);
+  x.imageSmoothingEnabled = false;
+  x.drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+function buildExportCanvas(scope, cols) {
+  if (scope === 'layer') {
+    return compositeFrame(state.activeFrame, { onlyLayer: state.activeLayer, includeHidden: true });
+  }
+  if (scope === 'sheet') {
+    const n = doc.frames.length;
+    cols = clamp(cols || n, 1, n);
+    const rows = Math.ceil(n / cols);
+    const c = makeCanvas(doc.w * cols, doc.h * rows);
+    const x = ctxOf(c);
+    for (let i = 0; i < n; i++) {
+      x.drawImage(compositeFrame(i), (i % cols) * doc.w, Math.floor(i / cols) * doc.h);
+    }
+    return c;
+  }
+  return compositeFrame(state.activeFrame);
+}
+function exportPng(scope, cols, scale, name) {
+  const c = scaleCanvasBy(buildExportCanvas(scope, cols), scale);
+  c.toBlob(blob => {
+    if (!blob) { alert('Export fehlgeschlagen.'); return; }
+    downloadBlob(blob, (name || doc.name || 'pixelart') + '.png');
+    hint('PNG exportiert (Download).');
+  }, 'image/png');
+}
+
+/* ---------------- Import (Bild) ---------------- */
+let pendingImportFiles = [];
+async function importImageAs(file, mode) {
+  if (mode === 'asset') { await addAssetFromFile(file); return; }
+  const dataURL = await readFileAsDataURL(file);
+  const img = await loadImage(dataURL);
+  if (mode === 'doc') {
+    const t = guessTileSize(img);
+    createDoc(img.width, img.height, t, t, file.name.replace(/\.[a-z]+$/i, ''));
+    ctxOf(activeCel()).drawImage(img, 0, 0);
+    docPixelsChanged();
+    refreshAllUI();
+    return;
+  }
+  // Als neue Ebene
+  const L = makeLayer(file.name.replace(/\.[a-z]+$/i, ''), doc.w, doc.h, doc.frames.length);
+  ctxOf(L.cels[state.activeFrame]).drawImage(img, 0, 0);
+  insertLayerUndoable(L, state.activeLayer, 'Bild als Ebene');
+  if (img.width > doc.w || img.height > doc.h) {
+    hint('Hinweis: Bild ist größer als die Leinwand und wurde oben links beschnitten.');
+  }
+}
+async function routeIncomingFiles(files) {
+  const list = Array.from(files);
+  const proj = list.find(f => /\.json$/i.test(f.name));
+  if (proj) { await loadProjectFile(proj); return; }
+  const imgs = list.filter(f => /^image\//.test(f.type) || /\.(png|gif|webp|bmp)$/i.test(f.name));
+  if (!imgs.length) return;
+  pendingImportFiles = imgs;
+  $('#impFileName').textContent = imgs.map(f => f.name).join(', ');
+  $('#dlgImport').showModal();
+}
+
+/* ---------------- Statusleiste / Toggles ---------------- */
+function updateDocStatus() {
+  $('#stDoc').textContent = `${doc.name} · ${doc.w}×${doc.h} px · Kachel ${doc.tileW}×${doc.tileH}`;
+}
+function syncToggles() {
+  $('#tgPixelGrid').classList.toggle('toggled', state.show.pixelGrid);
+  $('#tgTileGrid').classList.toggle('toggled', state.show.tileGrid);
+  $('#tgSnap').classList.toggle('toggled', state.snap);
+  $('#tgRulers').classList.toggle('toggled', state.show.rulers);
+  $('#tgGuides').classList.toggle('toggled', state.show.guides);
+  $('#tgOnion').classList.toggle('toggled', state.onion);
+  $('#center').classList.toggle('no-rulers', !state.show.rulers);
+}
+function refreshAllUI() {
+  renderLayers();
+  renderFrames();
+  renderPalette();
+  renderAssets();
+  renderToolOptions();
+  updateColorUI();
+  updateDocStatus();
+  updateSelStatus();
+  updateUndoButtons();
+  syncToggles();
+  requestRender();
+}
+
+/* ---------------- Verkabelung ---------------- */
+function wireUI() {
+  // Werkzeuge
+  $$('#toolcol .tool').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+  $('#btnSwapColors').addEventListener('click', swapColors);
+  $('#fgSwatch').addEventListener('click', () => $('#inpColorNative').click());
+  $('#bgSwatch').addEventListener('click', swapColors);
+
+  // Topbar
+  $('#btnNew').addEventListener('click', () => {
+    $('#inpNewName').value = doc ? doc.name : 'pixelart';
+    $('#dlgNew').showModal();
+  });
+  $('#btnOpenProj').addEventListener('click', () => $('#fileProj').click());
+  $('#btnSaveProj').addEventListener('click', saveProject);
+  $('#btnImport').addEventListener('click', () => $('#fileImport').click());
+  $('#btnExportPng').addEventListener('click', () => {
+    $('#inpExpName').value = doc.name || 'pixelart';
+    $('#inpExpCols').value = doc.frames.length;
+    $('#dlgExport').showModal();
+  });
+  $('#btnUndo').addEventListener('click', doUndo);
+  $('#btnRedo').addEventListener('click', doRedo);
+  $('#btnResize').addEventListener('click', () => {
+    $('#inpRw').value = doc.w;
+    $('#inpRh').value = doc.h;
+    $('#dlgResize').showModal();
+  });
+  $('#btnHelp').addEventListener('click', () => $('#dlgHelp').showModal());
+
+  $('#inpTileW').addEventListener('change', e => {
+    doc.tileW = clamp(parseInt(e.target.value, 10) || 1, 1, 512);
+    e.target.value = doc.tileW; state.dirtyDoc = true; updateDocStatus(); requestRender();
+  });
+  $('#inpTileH').addEventListener('change', e => {
+    doc.tileH = clamp(parseInt(e.target.value, 10) || 1, 1, 512);
+    e.target.value = doc.tileH; state.dirtyDoc = true; updateDocStatus(); requestRender();
+  });
+
+  $('#tgPixelGrid').addEventListener('click', () => { state.show.pixelGrid = !state.show.pixelGrid; syncToggles(); requestRender(); });
+  $('#tgTileGrid').addEventListener('click', () => { state.show.tileGrid = !state.show.tileGrid; syncToggles(); requestRender(); });
+  $('#tgSnap').addEventListener('click', () => { state.snap = !state.snap; syncToggles(); requestRender(); });
+  $('#tgRulers').addEventListener('click', () => { state.show.rulers = !state.show.rulers; syncToggles(); requestRender(); });
+  $('#tgGuides').addEventListener('click', () => { state.show.guides = !state.show.guides; syncToggles(); requestRender(); });
+  $('#btnClearGuides').addEventListener('click', () => { state.guides = []; state.dirtyDoc = true; requestRender(); });
+
+  $('#btnZoomIn').addEventListener('click', () => zoomStep(1));
+  $('#btnZoomOut').addEventListener('click', () => zoomStep(-1));
+  $('#btnZoomFit').addEventListener('click', fitView);
+
+  // Farben
+  $('#inpHex').addEventListener('change', e => {
+    const rgb = hexToRgb(e.target.value);
+    if (rgb) setFgColor({ ...rgb, a: state.fg.a });
+    else e.target.value = rgbToHex(state.fg);
+  });
+  $('#inpColorNative').addEventListener('input', e => {
+    const rgb = hexToRgb(e.target.value);
+    if (rgb) setFgColor({ ...rgb, a: state.fg.a });
+  });
+  $('#inpAlpha').addEventListener('input', e => {
+    state.fg.a = clamp(parseInt(e.target.value, 10) || 0, 0, 255);
+    $('#lblAlpha').textContent = Math.round(state.fg.a / 255 * 100) + ' %';
+    $('#fgSwatch').style.background = rgbaCss(state.fg);
+  });
+  $('#selPalette').addEventListener('change', e => {
+    const v = e.target.value;
+    if (PALETTES[v]) { state.palette = PALETTES[v].slice(); state.paletteId = v; }
+    else state.paletteId = 'custom';
+    renderPalette();
+  });
+  $('#btnAddSwatch').addEventListener('click', () => {
+    const sw = colorToSwatch(state.fg);
+    if (!state.palette.includes(sw)) {
+      state.palette.push(sw);
+      state.paletteId = 'custom';
+      $('#selPalette').value = 'custom';
+      renderPalette();
+    }
+  });
+  $('#btnPalFromImage').addEventListener('click', paletteFromImage);
+
+  // Ebenen
+  $('#btnLayerAdd').addEventListener('click', addLayer);
+  $('#btnLayerDup').addEventListener('click', dupLayer);
+  $('#btnLayerMerge').addEventListener('click', mergeDown);
+  $('#btnLayerUp').addEventListener('click', () => moveLayer(-1));
+  $('#btnLayerDown').addEventListener('click', () => moveLayer(1));
+  $('#btnLayerDel').addEventListener('click', delLayer);
+  $('#btnLayerImportPng').addEventListener('click', () => $('#fileLayer').click());
+
+  // Timeline
+  $('#btnPlay').addEventListener('click', togglePlay);
+  $('#btnFrameAdd').addEventListener('click', () => addFrame(false));
+  $('#btnFrameDup').addEventListener('click', () => addFrame(true));
+  $('#btnFrameDel').addEventListener('click', delFrame);
+  $('#btnFrameLeft').addEventListener('click', () => moveFrame(-1));
+  $('#btnFrameRight').addEventListener('click', () => moveFrame(1));
+  $('#inpFrameDur').addEventListener('change', e => {
+    const v = clamp(parseInt(e.target.value, 10) || 100, 16, 5000);
+    doc.frames[state.activeFrame].duration = v;
+    e.target.value = v;
+    state.dirtyDoc = true;
+  });
+  $('#tgOnion').addEventListener('click', () => { state.onion = !state.onion; syncToggles(); requestRender(); });
+
+  // Assets
+  $('#btnAssetAdd').addEventListener('click', () => $('#fileAsset').click());
+  $('#fileAsset').addEventListener('change', async e => {
+    for (const f of e.target.files) await addAssetFromFile(f);
+    e.target.value = '';
+  });
+
+  // Datei-Inputs
+  $('#fileProj').addEventListener('change', async e => {
+    if (e.target.files[0]) await loadProjectFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#fileImport').addEventListener('change', async e => {
+    await routeIncomingFiles(e.target.files);
+    e.target.value = '';
+  });
+  $('#fileLayer').addEventListener('change', async e => {
+    if (e.target.files[0]) await importImageAs(e.target.files[0], 'layer');
+    e.target.value = '';
+  });
+
+  // Drag & Drop
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', async e => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files.length) await routeIncomingFiles(e.dataTransfer.files);
+  });
+
+  // Dialog: Neues Dokument
+  const selT = $('#selTemplate');
+  TEMPLATES.forEach((t, i) => selT.append(h('option', { value: i }, t.name)));
+  selT.value = String(TEMPLATES.findIndex(t => t.id === 't48'));
+  selT.addEventListener('change', () => {
+    const t = TEMPLATES[parseInt(selT.value, 10)];
+    $('#inpNewW').value = t.w;
+    $('#inpNewH').value = t.h;
+    $('#inpNewT').value = t.t;
+  });
+  $('#btnNewCancel').addEventListener('click', () => $('#dlgNew').close());
+  $('#btnNewOk').addEventListener('click', () => {
+    const w = clamp(parseInt($('#inpNewW').value, 10) || 48, 1, 2048);
+    const hh = clamp(parseInt($('#inpNewH').value, 10) || 48, 1, 2048);
+    const t = clamp(parseInt($('#inpNewT').value, 10) || 16, 1, 512);
+    if (state.dirtyDoc && !confirm('Nicht gespeicherte Änderungen verwerfen und neues Dokument anlegen?')) return;
+    createDoc(w, hh, t, t, $('#inpNewName').value.trim() || 'pixelart');
+    $('#dlgNew').close();
+  });
+
+  // Dialog: Export
+  const syncExpCols = () => {
+    const scope = $$('input[name=expScope]').find(x => x.checked).value;
+    $('#rowExpCols').style.display = scope === 'sheet' ? '' : 'none';
+  };
+  $$('input[name=expScope]').forEach(r => r.addEventListener('change', syncExpCols));
+  syncExpCols();
+  $('#btnExpCancel').addEventListener('click', () => $('#dlgExport').close());
+  $('#btnExpOk').addEventListener('click', () => {
+    const scope = $$('input[name=expScope]').find(r => r.checked).value;
+    const cols = parseInt($('#inpExpCols').value, 10) || doc.frames.length;
+    const scale = parseInt($('#selExpScale').value, 10) || 1;
+    exportPng(scope, cols, scale, $('#inpExpName').value.trim());
+    $('#dlgExport').close();
+  });
+
+  // Dialog: Leinwand
+  $('#btnResizeCancel').addEventListener('click', () => $('#dlgResize').close());
+  $('#btnResizeOk').addEventListener('click', () => {
+    const w = clamp(parseInt($('#inpRw').value, 10) || doc.w, 1, 2048);
+    const hh = clamp(parseInt($('#inpRh').value, 10) || doc.h, 1, 2048);
+    resizeDoc(w, hh, $('#selAnchor').value, $('#chkRescale').checked);
+    $('#dlgResize').close();
+  });
+
+  // Dialog: Import
+  $('#btnImpCancel').addEventListener('click', () => { pendingImportFiles = []; $('#dlgImport').close(); });
+  $('#btnImpOk').addEventListener('click', async () => {
+    const mode = $$('input[name=impMode]').find(r => r.checked).value;
+    $('#dlgImport').close();
+    const files = pendingImportFiles;
+    pendingImportFiles = [];
+    for (let i = 0; i < files.length; i++) {
+      await importImageAs(files[i], mode === 'doc' && i > 0 ? 'asset' : mode);
+    }
+  });
+
+  // Dialog: Hilfe
+  $('#btnHelpClose').addEventListener('click', () => $('#dlgHelp').close());
+}
+
+/* ---------------- Start ---------------- */
+function init() {
+  wireUI();
+  createDoc(48, 48, 48, 48, 'pixelart');
+  setTool('pencil');
+  updateColorUI();
+  requestAnimationFrame(frameLoop);
+  hint('Willkommen! „Neu“ für Vorlagen (RPG Maker u. a.), „Import“ für Spritesheets als Brush. Taste ? zeigt die Hilfe.');
+}
+init();
+
+/* Test-/Debug-Schnittstelle (für automatisierte UI-Tests) */
+window.__pw = {
+  state, view,
+  getDoc: () => doc,
+  getPixel(x, y, li, fi) {
+    const cel = getCel(li === undefined ? state.activeLayer : li, fi === undefined ? state.activeFrame : fi);
+    return Array.from(ctxOf(cel).getImageData(x, y, 1, 1).data);
+  },
+  getCompositePixel(x, y) {
+    return Array.from(ctxOf(compositeFrame(state.activeFrame)).getImageData(x, y, 1, 1).data);
+  },
+  docToScreen(x, y) {
+    const r = mainCanvas.getBoundingClientRect();
+    return { x: r.left + view.panX + x * view.zoom, y: r.top + view.panY + y * view.zoom };
+  },
+  setTool, createDoc, saveProject,
+  serializeProject, loadProjectData,
+};
+</script>
+</body>
+</html>
