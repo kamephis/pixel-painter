@@ -179,7 +179,10 @@ hr.vsep{border:none; border-left:1px solid var(--border); height:22px; margin:0 
 /* Assets / brushes */
 #assetList{display:flex; flex-direction:column; gap:10px;}
 .assetcard{background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:6px; display:flex; flex-direction:column; gap:6px;}
-.assetcard .ahead{display:flex; align-items:center; gap:6px;}
+.assetcard .ahead{display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;}
+.assetcard .acaret{color:var(--muted); font-size:10px; display:inline-block; transition:transform .12s;}
+.assetcard.collapsed .acaret{transform:rotate(-90deg);}
+.assetcard.collapsed .asettings, .assetcard.collapsed .aviewwrap{display:none;}
 .assetcard .ahead .aname{flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .assetcard .asettings{display:flex; flex-wrap:wrap; gap:4px; align-items:center; font-size:12px;}
 .assetcard .asettings input[type=number]{width:48px; padding:2px 4px;}
@@ -2319,10 +2322,10 @@ async function addAssetFromFile(file) {
   const dataURL = await readFileAsDataURL(file);
   const img = await loadImage(dataURL);
   const t = guessTileSize(img);
-  const scale = img.width > 260 ? (img.width > 600 ? 0.5 : 1) : (img.width <= 96 ? 2 : 1);
   state.assets.push({
     id: uid(), name: file.name.replace(/\.[a-z]+$/i, ''), dataURL, img,
-    tileW: t, tileH: t, offX: 0, offY: 0, spacing: 0, mode: 'grid', sel: null, scale,
+    tileW: t, tileH: t, offX: 0, offY: 0, spacing: 0, mode: 'grid', sel: null,
+    scale: 1.5, collapsed: false,
   });
   state.dirtyDoc = true;
   renderAssets();
@@ -2378,8 +2381,17 @@ function buildAssetCard(a) {
     onclick: () => { a.mode = m; state.dirtyDoc = true; renderAssets(); },
   }, m === 'grid' ? 'Raster' : 'Frei');
 
-  return h('div', { class: 'assetcard' },
-    h('div', { class: 'ahead' },
+  return h('div', { class: 'assetcard' + (a.collapsed ? ' collapsed' : '') },
+    h('div', {
+      class: 'ahead', title: 'Klick: Sheet ein-/ausklappen',
+      onclick: ev => {
+        if (ev.target.closest('button')) return;
+        a.collapsed = !a.collapsed;
+        state.dirtyDoc = true;
+        renderAssets();
+      },
+    },
+      h('span', { class: 'acaret' }, '▾'),
       h('span', { class: 'aname', title: a.name }, a.name),
       h('span', { class: 'amode' }, modeBtn('grid'), ' ', modeBtn('free')),
       h('button', {
@@ -2405,7 +2417,7 @@ function buildAssetCard(a) {
       h('select', {
         title: 'Zoom der Vorschau',
         onchange: e => { a.scale = parseFloat(e.target.value); renderAssets(); },
-      }, ...[0.25, 0.5, 1, 2, 3, 4].map(z =>
+      }, ...[0.25, 0.5, 1, 1.5, 2, 3, 4].map(z =>
         h('option', { value: z, selected: Math.abs(a.scale - z) < 0.01 }, (z * 100) + ' %'))),
     ),
     h('div', { class: 'aviewwrap' }, view),
@@ -2555,6 +2567,7 @@ function serializeProject() {
     assets: state.assets.map(a => ({
       name: a.name, tileW: a.tileW, tileH: a.tileH, offX: a.offX, offY: a.offY,
       spacing: a.spacing, mode: a.mode, data: a.dataURL,
+      scale: a.scale, collapsed: a.collapsed,
     })),
     activeLayer: state.activeLayer,
     activeFrame: state.activeFrame,
@@ -2594,7 +2607,7 @@ async function loadProjectData(data) {
         id: uid(), name: a.name, dataURL: a.data, img,
         tileW: a.tileW || 16, tileH: a.tileH || 16, offX: a.offX || 0, offY: a.offY || 0,
         spacing: a.spacing || 0, mode: a.mode || 'grid', sel: null,
-        scale: img.width > 260 ? 0.5 : 1,
+        scale: a.scale || 1.5, collapsed: !!a.collapsed,
       });
     } catch (e) { /* Asset überspringen */ }
   }

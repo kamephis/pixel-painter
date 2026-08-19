@@ -28,6 +28,8 @@ index.html im Browser öffnen (Chrome, Edge, Firefox – alles lokal, file:// re
 - **Kachel anklicken oder mehrere Kacheln aufziehen → wird zum Stempel-Brush**:
   Terrain, Objekte oder ganze Sprite-Blöcke direkt auf die Leinwand malen
 - Modus **„Frei“** für eigene Sprites ohne festes Raster: beliebigen Pixelbereich aufziehen
+- Jedes geladene Sheet einzeln **einklappbar** (Klick auf den Kartenkopf);
+  Vorschau-Zoom pro Sheet einstellbar (25–400 %, Standard 150 %)
 - Optional „Deckend“ stempeln (Transparenz überschreiben)
 - Auswahl auf der Leinwand per „Auswahl → Brush“ selbst zum Stempel machen (auch Strg+C/Strg+V)
 

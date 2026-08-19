@@ -125,7 +125,7 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
   await page.setInputFiles('#fileAsset', sheetPath);
   await page.waitForTimeout(500);
   const assetInfo = await page.evaluate(() => window.__pw.state.assets.map(a => ({ w: a.img.width, h: a.img.height, t: a.tileW, s: a.scale })));
-  check('asset loaded, tile guessed 32', assetInfo.length === 1 && assetInfo[0].t === 32, JSON.stringify(assetInfo));
+  check('asset loaded, tile guessed 32, zoom default 150%', assetInfo.length === 1 && assetInfo[0].t === 32 && assetInfo[0].s === 1.5, JSON.stringify(assetInfo));
 
   const aview = page.locator('.assetcard canvas.aview');
   await aview.scrollIntoViewIfNeeded();
@@ -155,6 +155,16 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
     return { n, m, o };
   });
   check('stamp placed at snapped cell', stampResult.n === stampResult.m && stampResult.m > 0 && stampResult.o === 0, JSON.stringify(stampResult));
+
+  // Sprite-Karte einklappen/ausklappen (Klick auf den Kartenkopf)
+  await page.click('.assetcard .aname');
+  check('asset card collapses', await page.evaluate(() =>
+    document.querySelector('.assetcard').classList.contains('collapsed') &&
+    document.querySelector('.assetcard .aviewwrap').offsetParent === null));
+  await page.click('.assetcard .aname');
+  check('asset card expands', await page.evaluate(() =>
+    !document.querySelector('.assetcard').classList.contains('collapsed') &&
+    document.querySelector('.assetcard .aviewwrap').offsetParent !== null));
 
   /* ---------- Hilfslinien & Auswahl ---------- */
   const rt = await page.locator('#rulerTop').boundingBox();
@@ -233,7 +243,8 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
   const proj = JSON.parse(fs.readFileSync(projPath, 'utf8'));
   check('project json complete',
     proj.app === 'pixelpainter' && proj.layers.length === 2 && proj.layers[0].cels.length === 3 &&
-    proj.assets.length === 1 && proj.guides.length === 1 && proj.width === 144,
+    proj.assets.length === 1 && proj.assets[0].scale === 1.5 && proj.assets[0].collapsed === false &&
+    proj.guides.length === 1 && proj.width === 144,
     `layers=${proj.layers.length} cels=${proj.layers[0].cels.length} assets=${proj.assets.length} guides=${proj.guides.length}`);
 
   await page.click('#btnExportPng');
