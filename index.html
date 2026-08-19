@@ -595,6 +595,12 @@ dialog kbd{
     mehrere Kacheln aufziehen: Die Auswahl wird zum Stempel-Brush, mit dem sich z. B. Terrain direkt
     auf die Leinwand malen lässt. Für Sprites ohne festes Raster den Modus <b>Frei</b> wählen und
     einen beliebigen Pixelbereich aufziehen.</p>
+    <h4>Stempel-Objekte</h4>
+    <p>Mit aktiver Option <b>„Als Objekt“</b> (Standard) bleibt jede gestempelte Kachel ein eigenes
+    Objekt auf der Ebene: Mit <b>Verschieben (V)</b> anklicken (orangefarbener Rahmen), ziehen zum
+    Verschieben (Snap rastet an Kacheln ein), <kbd>Entf</kbd> löscht es, „Einbrennen“ macht es zu
+    festen Pixeln der Ebene. Objekte werden im Projekt gespeichert und beim PNG-Export mitgerendert.
+    Ohne „Als Objekt“ malt der Stempel wie ein Pinsel direkt in die Pixel.</p>
     <h4>Hilfslinien &amp; Raster</h4>
     <p>Hilfslinien aus dem oberen/linken Lineal auf die Leinwand ziehen. Mit <kbd>Umschalt</kbd>+Ziehen
     verschieben, zum Löschen zurück auf das Lineal ziehen (oder „✕ Hilfslinien“). Bei aktivem
@@ -720,9 +726,11 @@ const state = {
   shapeFill: false,
   fillGlobal: false,
   stampOverwrite: false,
+  stampAsObject: true,      // Stempel als bearbeitbares Objekt statt fest gemalter Pixel
   mirrorX: false,
   mirrorY: false,
   selection: null,          // {x,y,w,h} in Dokumentpixeln
+  selObject: null,          // {li, fi, obj} – ausgewähltes Stempel-Objekt
   stamp: null,              // {canvas, name}
   clipboard: null,          // {canvas, name}
   assets: [],               // {id,name,dataURL,img,tileW,tileH,offX,offY,spacing,mode:'grid'|'free',sel,scale}
@@ -752,7 +760,13 @@ function makeLayer(name, w, h, frameCount) {
   return {
     id: uid(), name, visible: true, opacity: 1, locked: false,
     cels: Array.from({ length: frameCount }, () => makeCanvas(w, h)),
+    // Pro Frame eine Liste von Stempel-Objekten {id,name,canvas,x,y},
+    // die über den Pixeln der Ebene liegen und bearbeitbar bleiben.
+    objects: Array.from({ length: frameCount }, () => []),
   };
+}
+function cloneObjects(objs) {
+  return objs.map(o => ({ id: uid(), name: o.name, canvas: cloneCanvas(o.canvas), x: o.x, y: o.y }));
 }
 
 function createDoc(w, h, tileW, tileH, name) {
@@ -764,6 +778,7 @@ function createDoc(w, h, tileW, tileH, name) {
   state.activeLayer = 0;
   state.activeFrame = 0;
   state.selection = null;
+  state.selObject = null;
   state.guides = [];
   undoStack.length = 0;
   redoStack.length = 0;
@@ -779,6 +794,17 @@ function activeLayer() { return doc.layers[state.activeLayer]; }
 function activeCel() { return doc.layers[state.activeLayer].cels[state.activeFrame]; }
 function getCel(li, fi) { return doc.layers[li].cels[fi]; }
 
+// Pixel der Ebene + darüberliegende Stempel-Objekte (an Dokumentgrenzen beschnitten)
+function layerComposite(li, fi) {
+  const L = doc.layers[li];
+  const objs = L.objects[fi];
+  if (!objs || !objs.length) return L.cels[fi];
+  const c = cloneCanvas(L.cels[fi]);
+  const x = ctxOf(c);
+  for (const o of objs) x.drawImage(o.canvas, o.x, o.y);
+  return c;
+}
+
 function compositeFrame(fi, opts = {}) {
   const c = makeCanvas(doc.w, doc.h);
   const x = ctxOf(c);
@@ -787,10 +813,68 @@ function compositeFrame(fi, opts = {}) {
     if (!L.visible && !opts.includeHidden) continue;
     if (opts.onlyLayer !== undefined && i !== opts.onlyLayer) continue;
     x.globalAlpha = L.opacity;
-    x.drawImage(L.cels[fi], 0, 0);
+    x.drawImage(layerComposite(i, fi), 0, 0);
   }
   x.globalAlpha = 1;
   return c;
+}
+
+/* ---------------- Stempel-Objekte ---------------- */
+function getSelObject() {
+  const so = state.selObject;
+  if (!so) return null;
+  const L = doc.layers[so.li];
+  if (!L || !L.objects[so.fi] || !L.objects[so.fi].includes(so.obj)) {
+    state.selObject = null;
+    return null;
+  }
+  return so;
+}
+function objectAt(px) {
+  const objs = activeLayer().objects[state.activeFrame];
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const o = objs[i];
+    if (px.x >= o.x && px.y >= o.y && px.x < o.x + o.canvas.width && px.y < o.y + o.canvas.height) return o;
+  }
+  return null;
+}
+function deleteSelectedObject() {
+  const so = getSelObject();
+  if (!so) return false;
+  const arr = doc.layers[so.li].objects[so.fi];
+  const idx = arr.indexOf(so.obj);
+  const obj = so.obj;
+  pushUndo({
+    undo() { arr.splice(idx, 0, obj); },
+    redo() { const i = arr.indexOf(obj); if (i >= 0) arr.splice(i, 1); },
+  });
+  arr.splice(idx, 1);
+  state.selObject = null;
+  renderToolOptions();
+  docPixelsChanged();
+  hint('Objekt gelöscht.');
+  return true;
+}
+function flattenSelectedObject() {
+  const so = getSelObject();
+  if (!so) return;
+  const L = doc.layers[so.li];
+  const cel = L.cels[so.fi];
+  const arr = L.objects[so.fi];
+  const idx = arr.indexOf(so.obj);
+  const obj = so.obj;
+  const before = ctxOf(cel).getImageData(0, 0, doc.w, doc.h);
+  ctxOf(cel).drawImage(obj.canvas, obj.x, obj.y);
+  arr.splice(idx, 1);
+  const after = ctxOf(cel).getImageData(0, 0, doc.w, doc.h);
+  pushUndo({
+    undo() { ctxOf(cel).putImageData(before, 0, 0); arr.splice(idx, 0, obj); },
+    redo() { ctxOf(cel).putImageData(after, 0, 0); const i = arr.indexOf(obj); if (i >= 0) arr.splice(i, 1); },
+  });
+  state.selObject = null;
+  renderToolOptions();
+  docPixelsChanged();
+  hint('Objekt in die Ebenen-Pixel eingebrannt.');
 }
 
 /* ---------------- Undo / Redo ---------------- */
@@ -989,12 +1073,12 @@ function render(t) {
     ctx.globalAlpha = 1;
   }
 
-  // Ebenen des aktiven Frames
+  // Ebenen des aktiven Frames (Pixel + Stempel-Objekte)
   for (let i = doc.layers.length - 1; i >= 0; i--) {
     const L = doc.layers[i];
     if (!L.visible) continue;
     ctx.globalAlpha = L.opacity;
-    ctx.drawImage(L.cels[state.activeFrame], dx, dy, dw, dh);
+    ctx.drawImage(layerComposite(i, state.activeFrame), dx, dy, dw, dh);
   }
   ctx.globalAlpha = 1;
 
@@ -1095,6 +1179,26 @@ function render(t) {
     ctx.lineDashOffset = -antsPhase + 5;
     ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
     ctx.setLineDash([]);
+  }
+
+  // Ausgewähltes Stempel-Objekt (Rahmen + Griffe)
+  const selObj = getSelObject();
+  if (selObj && selObj.li === state.activeLayer && selObj.fi === state.activeFrame) {
+    const o = selObj.obj;
+    const rx = dx + o.x * z, ry = dy + o.y * z;
+    const rw = o.canvas.width * z, rh = o.canvas.height * z;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#ffb64f';
+    ctx.lineDashOffset = -antsPhase;
+    ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+    ctx.setLineDash([]);
+    for (const [hx, hy] of [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]]) {
+      ctx.fillStyle = '#ffb64f';
+      ctx.fillRect(hx - 3, hy - 3, 6, 6);
+      ctx.strokeStyle = '#000';
+      ctx.strokeRect(hx - 3.5, hy - 3.5, 7, 7);
+    }
   }
 
   // Pinsel-Cursor
@@ -1212,7 +1316,7 @@ function frameLoop(t) {
     thumbsDirty = false;
     updateThumbs();
   }
-  if (needsRender || state.selection || state.playing) {
+  if (needsRender || state.selection || state.selObject || state.playing) {
     needsRender = false;
     render(t);
   }
@@ -1411,8 +1515,8 @@ const TOOL_HINTS = {
   rect: 'Ziehen: Rechteck · Umschalt: Quadrat',
   ellipse: 'Ziehen: Ellipse · Umschalt: Kreis',
   select: 'Ziehen: Bereich auswählen · Strg+C/X/V, Entf · Snap rastet an Kacheln ein',
-  move: 'Ziehen: Auswahl bzw. ganze Ebene verschieben · Snap rastet an Kacheln ein',
-  stamp: 'Brush im Panel rechts wählen, dann klicken/ziehen · Snap rastet an Kacheln ein',
+  move: 'Klick auf Stempel-Objekt: auswählen/verschieben (Entf löscht) · sonst Auswahl/Ebene verschieben · Snap aktiv',
+  stamp: 'Brush im Panel rechts wählen, dann klicken/ziehen · „Als Objekt“: bleibt nachträglich bearbeitbar (V)',
   hand: 'Ziehen: Ansicht verschieben (auch Leertaste oder mittlere Maustaste)',
 };
 function hint(msg) { $('#stHint').textContent = msg; }
@@ -1510,6 +1614,17 @@ const TOOLS = {
   move: {
     down(px) {
       if (!paintable()) return;
+      // Zuerst prüfen, ob ein Stempel-Objekt getroffen wurde: auswählen & verschieben
+      // Optionsleiste erst bei pointerup aktualisieren – ein Re-Layout während
+      // des Ziehens würde die Leinwand verschieben und die Koordinaten verfälschen.
+      const obj = objectAt(px);
+      if (obj) {
+        state.selObject = { li: state.activeLayer, fi: state.activeFrame, obj };
+        moveOp = { type: 'obj', obj, start: px, ox: obj.x, oy: obj.y };
+        requestRender();
+        return;
+      }
+      if (state.selObject) state.selObject = null;
       const edit = beginCelEdit();
       const cel = activeCel();
       const cx = ctxOf(cel);
@@ -1519,17 +1634,38 @@ const TOOLS = {
       const float = makeCanvas(region.w, region.h);
       ctxOf(float).drawImage(cel, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
       cx.clearRect(region.x, region.y, region.w, region.h);
-      moveOp = { edit, mode, region, float, start: px, off: { dx: 0, dy: 0 } };
+      moveOp = { type: 'pixels', edit, mode, region, float, start: px, off: { dx: 0, dy: 0 } };
       drawMovePreview();
       docPixelsChanged();
     },
     move(px) {
       if (!moveOp) return;
+      if (moveOp.type === 'obj') {
+        const off = snapOffset(px.x - moveOp.start.x, px.y - moveOp.start.y);
+        moveOp.obj.x = moveOp.ox + off.dx;
+        moveOp.obj.y = moveOp.oy + off.dy;
+        docPixelsChanged();
+        return;
+      }
       moveOp.off = snapOffset(px.x - moveOp.start.x, px.y - moveOp.start.y);
       drawMovePreview();
     },
     up() {
       if (!moveOp) return;
+      if (moveOp.type === 'obj') {
+        const { obj, ox, oy } = moveOp;
+        const nx = obj.x, ny = obj.y;
+        if (nx !== ox || ny !== oy) {
+          pushUndo({
+            undo() { obj.x = ox; obj.y = oy; },
+            redo() { obj.x = nx; obj.y = ny; },
+          });
+        }
+        moveOp = null;
+        renderToolOptions();
+        docPixelsChanged();
+        return;
+      }
       const { edit, mode, region, float, off } = moveOp;
       const cel = getCel(edit.li, edit.fi);
       ctxOf(cel).drawImage(float, region.x + off.dx, region.y + off.dy);
@@ -1540,9 +1676,17 @@ const TOOLS = {
       moveOp = null;
       clearPreview();
       commitCelEdit(edit);
+      renderToolOptions();
     },
     cancel() {
       if (!moveOp) return;
+      if (moveOp.type === 'obj') {
+        moveOp.obj.x = moveOp.ox;
+        moveOp.obj.y = moveOp.oy;
+        moveOp = null;
+        docPixelsChanged();
+        return;
+      }
       ctxOf(getCel(moveOp.edit.li, moveOp.edit.fi)).putImageData(moveOp.edit.before, 0, 0);
       moveOp = null;
       clearPreview();
@@ -1556,18 +1700,54 @@ const TOOLS = {
       if (!paintable()) return;
       clearPreview();
       const pos = stampPos(px);
-      stampOp = { edit: beginCelEdit(), lastKey: pos.x + ',' + pos.y };
-      placeStamp(pos);
+      if (state.stampAsObject) {
+        stampOp = { objectMode: true, placed: [], lastKey: pos.x + ',' + pos.y };
+        placeStampObject(pos);
+      } else {
+        stampOp = { edit: beginCelEdit(), lastKey: pos.x + ',' + pos.y };
+        placeStamp(pos);
+      }
     },
     move(px) {
       if (!stampOp) { drawStampGhost(px); return; }
       const pos = stampPos(px);
       const key = pos.x + ',' + pos.y;
-      if (key !== stampOp.lastKey) { stampOp.lastKey = key; placeStamp(pos); }
+      if (key !== stampOp.lastKey) {
+        stampOp.lastKey = key;
+        if (stampOp.objectMode) placeStampObject(pos);
+        else placeStamp(pos);
+      }
     },
-    up() { if (!stampOp) return; commitCelEdit(stampOp.edit); stampOp = null; },
+    up() {
+      if (!stampOp) return;
+      if (stampOp.objectMode) {
+        const L = activeLayer();
+        const fi = state.activeFrame;
+        const placed = stampOp.placed.slice();
+        pushUndo({
+          undo() { L.objects[fi] = L.objects[fi].filter(o => !placed.includes(o)); },
+          redo() { L.objects[fi].push(...placed); },
+        });
+        stampOp = null;
+        renderToolOptions();
+        docPixelsChanged();
+        hint('Objekt platziert – mit „Verschieben“ (V) anwählen, verschieben oder mit Entf löschen.');
+        return;
+      }
+      commitCelEdit(stampOp.edit);
+      stampOp = null;
+    },
     cancel() {
       if (!stampOp) return;
+      if (stampOp.objectMode) {
+        const L = activeLayer();
+        const fi = state.activeFrame;
+        L.objects[fi] = L.objects[fi].filter(o => !stampOp.placed.includes(o));
+        state.selObject = null;
+        stampOp = null;
+        docPixelsChanged();
+        return;
+      }
       ctxOf(getCel(stampOp.edit.li, stampOp.edit.fi)).putImageData(stampOp.edit.before, 0, 0);
       stampOp = null; docPixelsChanged();
     },
@@ -1642,6 +1822,18 @@ function stampPos(px) {
     };
   }
   return { x: px.x, y: px.y };
+}
+function placeStampObject(pos) {
+  const o = {
+    id: uid(), name: state.stamp.name,
+    canvas: cloneCanvas(state.stamp.canvas),
+    x: pos.x, y: pos.y,
+  };
+  const L = activeLayer();
+  L.objects[state.activeFrame].push(o);
+  stampOp.placed.push(o);
+  state.selObject = { li: state.activeLayer, fi: state.activeFrame, obj: o };
+  docPixelsChanged();
 }
 function placeStamp(pos) {
   const st = state.stamp;
@@ -1901,10 +2093,14 @@ document.addEventListener('keydown', ev => {
     case 'f': case 'F': toggleFullscreen(); break;
     case '?': $('#dlgHelp').showModal(); break;
     case 'Enter': togglePlay(); break;
-    case 'Delete': case 'Backspace': deleteSelection(); ev.preventDefault(); break;
+    case 'Delete': case 'Backspace':
+      if (!deleteSelectedObject()) deleteSelection();
+      ev.preventDefault();
+      break;
     case 'Escape': {
       const tool = TOOLS[state.tool];
       if (pointerState.mode === 'tool' && tool && tool.cancel) { tool.cancel(); pointerState.mode = null; }
+      else if (getSelObject()) { state.selObject = null; renderToolOptions(); requestRender(); }
       else if (state.selection) { state.selection = null; updateSelStatus(); requestRender(); }
       break;
     }
@@ -2011,12 +2207,25 @@ function renderToolOptions() {
       chip.append(h('span', { style: 'color:var(--muted)' }, 'Kein Brush gewählt → Panel „Brushes/Spritesheets“'));
     }
     add(chip);
-    add(mkToggle('Deckend', () => state.stampOverwrite, v => state.stampOverwrite = v,
-      'Zielbereich vor dem Stempeln leeren (Transparenz überschreiben)'));
+    add(mkToggle('Als Objekt', () => state.stampAsObject, v => state.stampAsObject = v,
+      'Stempel als bearbeitbares Objekt platzieren (mit V anwählen/verschieben, Entf löscht) statt Pixel fest einzumalen'));
+    if (!state.stampAsObject) {
+      add(mkToggle('Deckend', () => state.stampOverwrite, v => state.stampOverwrite = v,
+        'Zielbereich vor dem Stempeln leeren (Transparenz überschreiben)'));
+    }
     add(h('button', { onclick: selectionToBrush, title: 'Aktuelle Auswahl als Brush übernehmen' }, 'Auswahl → Brush'));
   }
   if (t === 'move') {
-    add(h('span', { style: 'color:var(--muted)' }, 'Ohne Auswahl wird die ganze Ebene verschoben.'));
+    const so = getSelObject();
+    if (so) {
+      const o = so.obj;
+      add(h('span', {}, `Objekt: ${o.name} (${o.canvas.width}×${o.canvas.height}) @ ${o.x},${o.y}`));
+      add(h('button', { id: 'btnObjDelete', onclick: deleteSelectedObject, title: 'Ausgewähltes Objekt löschen (Entf)' }, 'Löschen'));
+      add(h('button', { id: 'btnObjFlatten', onclick: flattenSelectedObject, title: 'Objekt fest in die Pixel der Ebene einmalen' }, 'Einbrennen'));
+    } else {
+      add(h('span', { style: 'color:var(--muted)' },
+        'Klick auf Stempel-Objekt: auswählen & verschieben · sonst Auswahl bzw. ganze Ebene.'));
+    }
   }
   if (t === 'hand') {
     add(h('span', { style: 'color:var(--muted)' }, 'Ansicht verschieben – Zoom mit Mausrad.'));
@@ -2096,7 +2305,7 @@ function renderLayers() {
     layerThumbEls.push({ cv: thumb, li: i });
     const row = h('div', {
       class: 'layerrow' + (i === state.activeLayer ? ' active' : ''),
-      onclick: () => { state.activeLayer = i; renderLayers(); requestRender(); },
+      onclick: () => { state.activeLayer = i; state.selObject = null; renderLayers(); renderToolOptions(); requestRender(); },
     },
       h('span', {
         class: 'icon' + (L.visible ? ' on' : ''), title: 'Sichtbarkeit',
@@ -2145,6 +2354,7 @@ function dupLayer() {
   const L = {
     id: uid(), name: src.name + ' Kopie', visible: src.visible, opacity: src.opacity, locked: false,
     cels: src.cels.map(cloneCanvas),
+    objects: src.objects.map(cloneObjects),
   };
   insertLayerUndoable(L, state.activeLayer, 'Ebene duplizieren');
 }
@@ -2177,11 +2387,12 @@ function mergeDown() {
   const top = doc.layers[i];
   const below = doc.layers[i + 1];
   const belowBefore = below.cels.map(cloneCanvas);
+  const belowObjectsBefore = below.objects.map(arr => arr.slice());
   const apply = () => {
     below.cels.forEach((cel, fi) => {
       const x = ctxOf(cel);
       x.globalAlpha = top.opacity;
-      x.drawImage(top.cels[fi], 0, 0);
+      x.drawImage(layerComposite(i, fi), 0, 0);
       x.globalAlpha = 1;
     });
     doc.layers.splice(i, 1);
@@ -2189,6 +2400,7 @@ function mergeDown() {
   pushUndo({
     undo() {
       below.cels = belowBefore.map(cloneCanvas);
+      below.objects = belowObjectsBefore.map(arr => arr.slice());
       doc.layers.splice(i, 0, top);
     },
     redo: apply,
@@ -2214,7 +2426,7 @@ function renderFrames() {
     frameThumbEls.push({ cv, fi: i });
     const cell = h('div', {
       class: 'framecell' + (i === state.activeFrame ? ' active' : ''),
-      onclick: () => { state.activeFrame = i; playAccum = 0; highlightActiveFrame(); requestRender(); },
+      onclick: () => { state.activeFrame = i; state.selObject = null; playAccum = 0; highlightActiveFrame(); requestRender(); },
     }, cv, h('span', { class: 'fnum' }, String(i + 1)));
     frameCellEls.push(cell);
     strip.append(cell);
@@ -2241,7 +2453,7 @@ function updateThumbs() {
     if (li >= doc.layers.length) continue;
     const x = ctxOf(cv);
     x.clearRect(0, 0, cv.width, cv.height);
-    const cel = doc.layers[li].cels[state.activeFrame];
+    const cel = layerComposite(li, state.activeFrame);
     const k = Math.min(cv.width / doc.w, cv.height / doc.h);
     const w = doc.w * k, hh = doc.h * k;
     x.drawImage(cel, (cv.width - w) / 2, (cv.height - hh) / 2, w, hh);
@@ -2252,15 +2464,19 @@ function addFrame(duplicate) {
   const at = state.activeFrame + 1;
   const dur = doc.frames[state.activeFrame].duration;
   const cels = doc.layers.map(L => duplicate ? cloneCanvas(L.cels[state.activeFrame]) : makeCanvas(doc.w, doc.h));
+  const objs = doc.layers.map(L => duplicate ? cloneObjects(L.objects[state.activeFrame]) : []);
   const frame = { duration: dur };
   const apply = () => {
     doc.frames.splice(at, 0, frame);
-    doc.layers.forEach((L, li) => L.cels.splice(at, 0, cels[li]));
+    doc.layers.forEach((L, li) => {
+      L.cels.splice(at, 0, cels[li]);
+      L.objects.splice(at, 0, objs[li]);
+    });
   };
   pushUndo({
     undo() {
       doc.frames.splice(at, 1);
-      doc.layers.forEach(L => L.cels.splice(at, 1));
+      doc.layers.forEach(L => { L.cels.splice(at, 1); L.objects.splice(at, 1); });
     },
     redo: apply,
   });
@@ -2274,18 +2490,23 @@ function delFrame() {
   const at = state.activeFrame;
   const frame = doc.frames[at];
   const cels = doc.layers.map(L => L.cels[at]);
+  const objs = doc.layers.map(L => L.objects[at]);
   pushUndo({
     undo() {
       doc.frames.splice(at, 0, frame);
-      doc.layers.forEach((L, li) => L.cels.splice(at, 0, cels[li]));
+      doc.layers.forEach((L, li) => {
+        L.cels.splice(at, 0, cels[li]);
+        L.objects.splice(at, 0, objs[li]);
+      });
     },
     redo() {
       doc.frames.splice(at, 1);
-      doc.layers.forEach(L => L.cels.splice(at, 1));
+      doc.layers.forEach(L => { L.cels.splice(at, 1); L.objects.splice(at, 1); });
     },
   });
   doc.frames.splice(at, 1);
-  doc.layers.forEach(L => L.cels.splice(at, 1));
+  doc.layers.forEach(L => { L.cels.splice(at, 1); L.objects.splice(at, 1); });
+  state.selObject = null;
   state.activeFrame = clamp(at, 0, doc.frames.length - 1);
   docPixelsChanged();
   refreshAllUI();
@@ -2295,7 +2516,10 @@ function moveFrame(dir) {
   if (j < 0 || j >= doc.frames.length) return;
   const swap = () => {
     const tf = doc.frames[i]; doc.frames[i] = doc.frames[j]; doc.frames[j] = tf;
-    doc.layers.forEach(L => { const t = L.cels[i]; L.cels[i] = L.cels[j]; L.cels[j] = t; });
+    doc.layers.forEach(L => {
+      const t = L.cels[i]; L.cels[i] = L.cels[j]; L.cels[j] = t;
+      const to = L.objects[i]; L.objects[i] = L.objects[j]; L.objects[j] = to;
+    });
   };
   pushUndo({ undo: swap, redo: swap });
   swap();
@@ -2522,7 +2746,9 @@ function resizeDoc(nw, nh, anchor, rescale) {
   const ay = anchor[0] === 't' ? 0 : anchor[0] === 'b' ? 1 : 0.5;
   const offX = Math.round((nw - ow) * ax);
   const offY = Math.round((nh - oh) * ay);
+  const fx = nw / ow, fy = nh / oh;
   const oldCels = doc.layers.map(L => L.cels.slice());
+  const oldObjects = doc.layers.map(L => L.objects.map(arr => arr.slice()));
   const newCels = doc.layers.map(L => L.cels.map(old => {
     const c = makeCanvas(nw, nh);
     const x = ctxOf(c);
@@ -2531,18 +2757,30 @@ function resizeDoc(nw, nh, anchor, rescale) {
     else x.drawImage(old, offX, offY);
     return c;
   }));
-  const apply = (w2, h2, cels) => {
+  const newObjects = doc.layers.map(L => L.objects.map(arr => arr.map(o => {
+    if (!rescale) return { ...o, x: o.x + offX, y: o.y + offY };
+    const c = makeCanvas(Math.max(1, Math.round(o.canvas.width * fx)), Math.max(1, Math.round(o.canvas.height * fy)));
+    const x = ctxOf(c);
+    x.imageSmoothingEnabled = false;
+    x.drawImage(o.canvas, 0, 0, c.width, c.height);
+    return { ...o, canvas: c, x: Math.round(o.x * fx), y: Math.round(o.y * fy) };
+  })));
+  const apply = (w2, h2, cels, objects) => {
     doc.w = w2; doc.h = h2;
-    doc.layers.forEach((L, li) => { L.cels = cels[li].slice(); });
+    doc.layers.forEach((L, li) => {
+      L.cels = cels[li].slice();
+      L.objects = objects[li].map(arr => arr.slice());
+    });
     previewCanvas = makeCanvas(w2, h2);
     state.selection = null;
+    state.selObject = null;
     updateSelStatus();
   };
   pushUndo({
-    undo() { apply(ow, oh, oldCels); },
-    redo() { apply(nw, nh, newCels); },
+    undo() { apply(ow, oh, oldCels, oldObjects); },
+    redo() { apply(nw, nh, newCels, newObjects); },
   });
-  apply(nw, nh, newCels);
+  apply(nw, nh, newCels, newObjects);
   docPixelsChanged();
   fitView();
   refreshAllUI();
@@ -2551,13 +2789,16 @@ function resizeDoc(nw, nh, anchor, rescale) {
 /* ---------------- Projekt speichern / laden ---------------- */
 function serializeProject() {
   return {
-    app: 'pixelpainter', version: 1,
+    app: 'pixelpainter', version: 2,
     name: doc.name, width: doc.w, height: doc.h,
     tileW: doc.tileW, tileH: doc.tileH,
     frames: doc.frames.map(f => ({ duration: f.duration })),
     layers: doc.layers.map(L => ({
       name: L.name, visible: L.visible, opacity: L.opacity, locked: L.locked,
       cels: L.cels.map(c => c.toDataURL('image/png')),
+      objects: L.objects.map(arr => arr.map(o => ({
+        name: o.name, x: o.x, y: o.y, data: o.canvas.toDataURL('image/png'),
+      }))),
     })),
     palette: state.palette.slice(),
     paletteId: state.paletteId,
@@ -2594,9 +2835,22 @@ async function loadProjectData(data) {
       ctxOf(c).drawImage(img, 0, 0);
       cels.push(c);
     }
+    const objects = [];
+    for (let fi = 0; fi < cels.length; fi++) {
+      const frameObjs = [];
+      for (const o of ((L.objects && L.objects[fi]) || [])) {
+        try {
+          const img = await loadImage(o.data);
+          const c = makeCanvas(img.width, img.height);
+          ctxOf(c).drawImage(img, 0, 0);
+          frameObjs.push({ id: uid(), name: o.name || 'Objekt', canvas: c, x: o.x | 0, y: o.y | 0 });
+        } catch (e) { /* Objekt überspringen */ }
+      }
+      objects.push(frameObjs);
+    }
     layers.push({
       id: uid(), name: L.name || 'Ebene', visible: L.visible !== false,
-      opacity: L.opacity === undefined ? 1 : L.opacity, locked: !!L.locked, cels,
+      opacity: L.opacity === undefined ? 1 : L.opacity, locked: !!L.locked, cels, objects,
     });
   }
   const assets = [];
@@ -2628,6 +2882,7 @@ async function loadProjectData(data) {
   state.activeLayer = clamp(data.activeLayer || 0, 0, doc.layers.length - 1);
   state.activeFrame = clamp(data.activeFrame || 0, 0, doc.frames.length - 1);
   state.selection = null;
+  state.selObject = null;
   state.stamp = null;
   undoStack.length = 0;
   redoStack.length = 0;
@@ -3269,6 +3524,7 @@ window.__pw = {
   serializeProject, loadProjectData,
   getUiState: () => uiState,
   floatPanel, dockPanel,
+  getSelObject, deleteSelectedObject, flattenSelectedObject,
 };
 </script>
 </body>

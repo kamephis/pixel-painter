@@ -140,6 +140,8 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
   });
   check('tile click -> stamp brush + tool', !!stampInfo && stampInfo.w === 32 && stampInfo.h === 32 && stampInfo.tool === 'stamp', JSON.stringify(stampInfo));
 
+  // Klassisches Pixel-Stempeln (Objektmodus aus)
+  await page.evaluate(() => { window.__pw.state.stampAsObject = false; });
   await clickDoc(60, 60); // Snap an -> Zelle (48,48)
   const stampResult = await page.evaluate(() => {
     const d = window.__pw.getDoc();
@@ -165,6 +167,82 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
   check('asset card expands', await page.evaluate(() =>
     !document.querySelector('.assetcard').classList.contains('collapsed') &&
     document.querySelector('.assetcard .aviewwrap').offsetParent !== null));
+
+  /* ---------- Stempel-Objekte (bearbeitbar auf der Leinwand) ---------- */
+  await page.evaluate(() => { window.__pw.state.stampAsObject = true; window.__pw.setTool('stamp'); });
+  await clickDoc(100, 100); // Snap an -> Zelle (96,96)
+  const objInfo = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    const objs = d.layers[s.activeLayer].objects[s.activeFrame];
+    const img = d.layers[s.activeLayer].cels[s.activeFrame].getContext('2d').getImageData(96, 96, 32, 32).data;
+    let n = 0; for (let i = 3; i < img.length; i += 4) if (img[i] > 0) n++;
+    return { count: objs.length, x: objs[0] && objs[0].x, y: objs[0] && objs[0].y, celPixels: n, selected: !!window.__pw.getSelObject() };
+  });
+  check('stamp as object: object created, cel untouched',
+    objInfo.count === 1 && objInfo.x === 96 && objInfo.y === 96 && objInfo.celPixels === 0 && objInfo.selected,
+    JSON.stringify(objInfo));
+  const compPx = await page.evaluate(() => window.__pw.getCompositePixel(100, 100));
+  check('object rendered in composite/export', compPx[3] > 0, compPx.join());
+
+  // Anwählen & verschieben mit dem Verschieben-Werkzeug (Snap aus für Pixel-genau)
+  await page.evaluate(() => { window.__pw.state.snap = false; window.__pw.state.selObject = null; window.__pw.setTool('move'); });
+  await dragDoc(100, 100, 110, 105);
+  const movedObj = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    const o = d.layers[s.activeLayer].objects[s.activeFrame][0];
+    return { x: o.x, y: o.y, sel: !!window.__pw.getSelObject() };
+  });
+  check('object selectable and movable', movedObj.x === 106 && movedObj.y === 101 && movedObj.sel, JSON.stringify(movedObj));
+  await page.keyboard.press('Control+Z');
+  const undoneObj = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    const o = d.layers[s.activeLayer].objects[s.activeFrame][0];
+    return [o.x, o.y].join();
+  });
+  check('undo object move', undoneObj === '96,96', undoneObj);
+
+  // Löschen per Entf + Undo
+  await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    s.selObject = { li: s.activeLayer, fi: s.activeFrame, obj: d.layers[s.activeLayer].objects[s.activeFrame][0] };
+  });
+  await page.keyboard.press('Delete');
+  let objCount = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    return d.layers[s.activeLayer].objects[s.activeFrame].length;
+  });
+  check('object deleted with Delete key', objCount === 0, 'count=' + objCount);
+  await page.keyboard.press('Control+Z');
+  objCount = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    return d.layers[s.activeLayer].objects[s.activeFrame].length;
+  });
+  check('undo object delete', objCount === 1, 'count=' + objCount);
+
+  // Einbrennen -> feste Pixel, Undo stellt Objekt wieder her
+  await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    s.selObject = { li: s.activeLayer, fi: s.activeFrame, obj: d.layers[s.activeLayer].objects[s.activeFrame][0] };
+    window.__pw.flattenSelectedObject();
+  });
+  const flat = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    const objs = d.layers[s.activeLayer].objects[s.activeFrame];
+    const img = d.layers[s.activeLayer].cels[s.activeFrame].getContext('2d').getImageData(96, 96, 32, 32).data;
+    let n = 0; for (let i = 3; i < img.length; i += 4) if (img[i] > 0) n++;
+    return { objs: objs.length, n };
+  });
+  check('flatten object into layer pixels', flat.objs === 0 && flat.n > 0, JSON.stringify(flat));
+  await page.keyboard.press('Control+Z');
+  const unflat = await page.evaluate(() => {
+    const d = window.__pw.getDoc(); const s = window.__pw.state;
+    const objs = d.layers[s.activeLayer].objects[s.activeFrame];
+    const img = d.layers[s.activeLayer].cels[s.activeFrame].getContext('2d').getImageData(96, 96, 32, 32).data;
+    let n = 0; for (let i = 3; i < img.length; i += 4) if (img[i] > 0) n++;
+    return { objs: objs.length, n };
+  });
+  check('undo flatten restores object', unflat.objs === 1 && unflat.n === 0, JSON.stringify(unflat));
+  await page.evaluate(() => { window.__pw.state.snap = true; window.__pw.state.selObject = null; });
 
   /* ---------- Hilfslinien & Auswahl ---------- */
   const rt = await page.locator('#rulerTop').boundingBox();
@@ -244,8 +322,9 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
   check('project json complete',
     proj.app === 'pixelpainter' && proj.layers.length === 2 && proj.layers[0].cels.length === 3 &&
     proj.assets.length === 1 && proj.assets[0].scale === 1.5 && proj.assets[0].collapsed === false &&
-    proj.guides.length === 1 && proj.width === 144,
-    `layers=${proj.layers.length} cels=${proj.layers[0].cels.length} assets=${proj.assets.length} guides=${proj.guides.length}`);
+    proj.guides.length === 1 && proj.width === 144 &&
+    proj.layers[0].objects && proj.layers[0].objects[1].length === 1,
+    `layers=${proj.layers.length} cels=${proj.layers[0].cels.length} assets=${proj.assets.length} guides=${proj.guides.length} objs=${proj.layers[0].objects ? proj.layers[0].objects[1].length : '-'}`);
 
   await page.click('#btnExportPng');
   await page.check('input[name=expScope][value=sheet]');
@@ -276,6 +355,12 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
     return n;
   });
   check('stamped pixels persisted through save/load', n2 > 0, 'n=' + n2);
+  const objRestored = await page.evaluate(() => {
+    const d = window.__pw.getDoc();
+    const o = d.layers[0].objects[1][0];
+    return o ? [o.x, o.y, o.canvas.width, o.canvas.height].join() : 'none';
+  });
+  check('stamp object persisted through save/load', objRestored === '96,96,32,32', objRestored);
 
   /* ---------- Panel-Layout & Ansicht ---------- */
   // Einklappen per Klick auf den Panel-Kopf

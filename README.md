@@ -30,7 +30,13 @@ index.html im Browser öffnen (Chrome, Edge, Firefox – alles lokal, file:// re
 - Modus **„Frei“** für eigene Sprites ohne festes Raster: beliebigen Pixelbereich aufziehen
 - Jedes geladene Sheet einzeln **einklappbar** (Klick auf den Kartenkopf);
   Vorschau-Zoom pro Sheet einstellbar (25–400 %, Standard 150 %)
-- Optional „Deckend“ stempeln (Transparenz überschreiben)
+- **Stempel-Objekte**: Mit „Als Objekt“ (Standard) bleibt jede gestempelte Kachel ein
+  bearbeitbares Objekt auf der Ebene – mit dem Verschieben-Werkzeug (V) anwählen
+  (orangefarbener Rahmen), verschieben (Snap), mit `Entf` löschen oder per
+  „Einbrennen“ in feste Pixel umwandeln; Objekte werden im Projekt gespeichert
+  und beim PNG-Export mitgerendert
+- Ohne „Als Objekt“ malt der Stempel klassisch in die Pixel; optional „Deckend“
+  (Transparenz überschreiben)
 - Auswahl auf der Leinwand per „Auswahl → Brush“ selbst zum Stempel machen (auch Strg+C/Strg+V)
 
 ### Malwerkzeuge
@@ -87,7 +93,7 @@ index.html im Browser öffnen (Chrome, Edge, Firefox – alles lokal, file:// re
 `M` Auswahl · `V` Verschieben · `S` Stempel · `H` Hand · `X` Farben tauschen ·
 `[` `]` Stiftgröße · `+`/`−`/`0` Zoom/Einpassen · `Strg+Z/Y` Undo/Redo ·
 `Strg+A/D` Alles/Nichts auswählen · `Strg+C/X/V` Kopieren/Ausschneiden/Einfügen ·
-`Entf` Auswahl löschen · `Enter` Animation · `F` Vollbild · `Esc` Abbrechen · `?` Hilfe
+`Entf` Auswahl/Objekt löschen · `Enter` Animation · `F` Vollbild · `Esc` Abbrechen · `?` Hilfe
 
 Die vollständige Hilfe ist in der App über den `?`-Button erreichbar.
 
@@ -100,6 +106,7 @@ NODE_PATH=$(npm root -g) node tests/e2e.js
 ```
 
 Die Suite deckt Zeichnen, Füllen, Formen, Undo/Redo, Ebenen, Frames/Playback,
-Sprite-Brush-Workflow, Snap, Hilfslinien, Auswahl/Verschieben, Projekt-Speichern/-Laden,
-PNG-Export sowie das Panel-Layout (Einklappen, Anordnen, Abdocken, Sidebar-Breite,
-1:1-Lupe, Vollbild, Layout-Persistenz) ab (43 Checks).
+Sprite-Brush-Workflow, Stempel-Objekte (platzieren, anwählen, verschieben, löschen,
+einbrennen, speichern/laden), Snap, Hilfslinien, Auswahl/Verschieben,
+Projekt-Speichern/-Laden, PNG-Export sowie das Panel-Layout (Einklappen, Anordnen,
+Abdocken, Sidebar-Breite, 1:1-Lupe, Vollbild, Layout-Persistenz) ab (54 Checks).
