@@ -1,5 +1,5 @@
 /*
- * End-to-End-Tests für PixelWerk (index.html).
+ * End-to-End-Tests für Pixel Painter (index.html).
  *
  * Voraussetzungen: Node + Playwright + Chromium.
  *   npm i -g playwright   (oder lokal)  und ein Chromium, das Playwright findet.
@@ -14,7 +14,7 @@ const os = require('os');
 const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
 
 (async () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pixelwerk-e2e-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pixelpainter-e2e-'));
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
   const errors = [];
@@ -228,11 +228,11 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
 
   /* ---------- Speichern, Export, Wiederherstellen ---------- */
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btnSaveProj')]);
-  const projPath = path.join(tmp, 'projekt.pixelwerk.json');
+  const projPath = path.join(tmp, 'projekt.pixelpainter.json');
   await dl.saveAs(projPath);
   const proj = JSON.parse(fs.readFileSync(projPath, 'utf8'));
   check('project json complete',
-    proj.app === 'pixelwerk' && proj.layers.length === 2 && proj.layers[0].cels.length === 3 &&
+    proj.app === 'pixelpainter' && proj.layers.length === 2 && proj.layers[0].cels.length === 3 &&
     proj.assets.length === 1 && proj.guides.length === 1 && proj.width === 144,
     `layers=${proj.layers.length} cels=${proj.layers[0].cels.length} assets=${proj.assets.length} guides=${proj.guides.length}`);
 
@@ -265,6 +265,98 @@ const APP = 'file://' + path.resolve(__dirname, '..', 'index.html');
     return n;
   });
   check('stamped pixels persisted through save/load', n2 > 0, 'n=' + n2);
+
+  /* ---------- Panel-Layout & Ansicht ---------- */
+  // Einklappen per Klick auf den Panel-Kopf
+  await page.click('.panel[data-panel="colors"] .phead');
+  check('panel collapse on header click', await page.evaluate(() =>
+    document.querySelector('.panel[data-panel="colors"]').classList.contains('collapsed') &&
+    document.querySelector('.panel[data-panel="colors"] .pbody').offsetParent === null));
+  await page.click('.panel[data-panel="colors"] .phead');
+  check('panel expand on second click', await page.evaluate(() =>
+    !document.querySelector('.panel[data-panel="colors"]').classList.contains('collapsed')));
+
+  // Neu anordnen: „Ebenen“ über „Farben“ ziehen
+  const lh = await page.locator('.panel[data-panel="layers"] .phead').boundingBox();
+  const chp = await page.locator('.panel[data-panel="colors"] .phead').boundingBox();
+  await page.mouse.move(lh.x + lh.width / 2, lh.y + lh.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(chp.x + chp.width / 2, chp.y + 2, { steps: 6 });
+  await page.mouse.up();
+  const order = await page.evaluate(() => window.__pw.getUiState().order.join(','));
+  check('panel reorder by drag (layers first)', order.startsWith('layers,colors'), order);
+
+  // Sidebar-Breite per Splitter ändern
+  const sw0 = await page.evaluate(() => document.querySelector('#sidebar').getBoundingClientRect().width);
+  const spb = await page.locator('#sbSplitter').boundingBox();
+  await page.mouse.move(spb.x + 2, spb.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(spb.x + 2 - 120, spb.y + 200, { steps: 5 });
+  await page.mouse.up();
+  const sw1 = await page.evaluate(() => document.querySelector('#sidebar').getBoundingClientRect().width);
+  check('sidebar width resizable', Math.abs(sw1 - (sw0 + 120)) <= 3, `${sw0} -> ${sw1}`);
+
+  // Panel abdocken, Fenster verschieben, wieder andocken
+  await page.click('.panel[data-panel="brushes"] .pfloat');
+  check('panel undocks to floating window', await page.evaluate(() => !!document.querySelector('.floatwin[data-panel="brushes"]')));
+  const fw = await page.locator('.floatwin[data-panel="brushes"]').boundingBox();
+  const fh = await page.locator('.floatwin[data-panel="brushes"] .phead').boundingBox();
+  await page.mouse.move(fh.x + 60, fh.y + fh.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(fh.x + 60 + 90, fh.y + fh.height / 2 + 60, { steps: 5 });
+  await page.mouse.up();
+  const fw2 = await page.locator('.floatwin[data-panel="brushes"]').boundingBox();
+  check('floating window movable', Math.abs(fw2.x - (fw.x + 90)) <= 3 && Math.abs(fw2.y - (fw.y + 60)) <= 3,
+    `dx=${Math.round(fw2.x - fw.x)} dy=${Math.round(fw2.y - fw.y)}`);
+  // Fenster in die Ecke schieben, damit die Leinwand frei ist – Zeichnen muss weiter funktionieren
+  await page.evaluate(() => {
+    const w = document.querySelector('.floatwin[data-panel="brushes"]');
+    w.style.left = (document.querySelector('#main').clientWidth - w.offsetWidth - 8) + 'px';
+    w.style.top = '8px';
+  });
+  await page.evaluate(() => { window.__pw.setTool('pencil'); window.__pw.state.fg = { r: 1, g: 2, b: 3, a: 255 }; });
+  await clickDoc(3, 3);
+  check('drawing works while panel floats', (await page.evaluate(() => window.__pw.getPixel(3, 3))).join() === '1,2,3,255');
+  await page.click('.floatwin[data-panel="brushes"] .pfloat');
+  check('panel docks back into sidebar', await page.evaluate(() =>
+    !document.querySelector('.floatwin') && !!document.querySelector('#sidebar .panel[data-panel="brushes"]')));
+
+  // 1:1-Lupe über Kacheln
+  await page.click('#tgTileZoom');
+  const aview2 = page.locator('.assetcard canvas.aview');
+  await aview2.scrollIntoViewIfNeeded();
+  const avb = await aview2.boundingBox();
+  await page.mouse.move(avb.x + 10, avb.y + 10);
+  await page.waitForTimeout(120);
+  const mag = await page.evaluate(() => {
+    const m = document.querySelector('#magnifier');
+    const c = m.querySelector('canvas');
+    return { hidden: m.classList.contains('hidden'), w: c.width, h: c.height, cap: m.querySelector('.magcap').textContent };
+  });
+  check('tile magnifier shows 1:1 (32x32)', !mag.hidden && mag.w === 32 && mag.h === 32, JSON.stringify(mag));
+  await page.mouse.move(avb.x - 40, avb.y - 40);
+  await page.waitForTimeout(120);
+  check('magnifier hides on leave', await page.evaluate(() => document.querySelector('#magnifier').classList.contains('hidden')));
+  await page.click('#tgTileZoom');
+
+  // Vollbildmodus
+  await page.click('#btnFullscreen');
+  await page.waitForTimeout(250);
+  const fsOn = await page.evaluate(() => !!document.fullscreenElement);
+  await page.click('#btnFullscreen');
+  await page.waitForTimeout(250);
+  const fsOff = await page.evaluate(() => !document.fullscreenElement);
+  check('fullscreen toggle', fsOn && fsOff, `on=${fsOn} off=${fsOff}`);
+
+  // Layout-Persistenz über Reload (localStorage)
+  await page.waitForTimeout(300); // saveUiState ist gedrosselt
+  await page.reload();
+  await page.waitForTimeout(400);
+  const persisted = await page.evaluate(() => ({
+    order0: window.__pw.getUiState().order[0],
+    sw: Math.round(document.querySelector('#sidebar').getBoundingClientRect().width),
+  }));
+  check('ui layout persisted after reload', persisted.order0 === 'layers' && Math.abs(persisted.sw - sw1) <= 3, JSON.stringify(persisted) + ' erwartet sw=' + Math.round(sw1));
 
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 

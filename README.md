@@ -1,9 +1,9 @@
-# PixelWerk – Pixel-Art-Editor für Videospiel-Grafiken
+# Pixel Painter – Pixel-Art-Editor für Videospiel-Grafiken
 
 Ein vollständiger Pixel-Art-Editor in **einer einzigen HTML-Datei**. Kein Build, kein Server,
 kein Deploy: `index.html` im Browser öffnen (Doppelklick genügt) und loslegen.
 
-![PixelWerk Screenshot](docs/screenshot.png)
+![Pixel Painter Screenshot](docs/screenshot.png)
 
 ## Start
 
@@ -60,11 +60,23 @@ index.html im Browser öffnen (Chrome, Edge, Firefox – alles lokal, file:// re
   zum Löschen zurück aufs Lineal ziehen
 - Zoom 12,5 %–6400 % (Mausrad), Verschieben mit Leertaste/mittlerer Maustaste
 
+### Oberfläche & Panels
+- Panels (Farben, Ebenen, Brushes) per Klick auf den Titel **ein-/ausklappbar**
+- Panels per Drag am Titel **neu anordnen** – oder nach links aus der Sidebar ziehen
+  bzw. ⇱ klicken, um sie als **frei bewegliche, größenveränderbare Fenster abzudocken**
+  (⇲ dockt wieder an)
+- **Sidebar-Breite** am linken Rand per Drag einstellbar
+- **🔍 1:1-Lupe**: Kacheln im Brush-Panel beim Überfahren in Originalgröße ansehen
+  (praktisch bei verkleinerter Sheet-Vorschau)
+- **Vollbildmodus** über ⛶ oder Taste `F`
+- Das komplette Layout (Reihenfolge, Breite, abgedockte Fenster, Lupe) wird
+  automatisch gemerkt (localStorage)
+
 ## Speichern & Export
 
 | Format | Inhalt |
 |---|---|
-| **`.pixelwerk.json`** (Speichern/Öffnen) | Projektformat **mit allen Ebenen**, Frames, Palette, Hilfslinien und geladenen Brush-Spritesheets |
+| **`.pixelpainter.json`** (Speichern/Öffnen) | Projektformat **mit allen Ebenen**, Frames, Palette, Hilfslinien und geladenen Brush-Spritesheets |
 | **PNG** (Export) | Aktueller Frame, nur aktive Ebene oder alle Frames als Spritesheet – Skalierung 1×–16× |
 
 ## Tastaturkürzel
@@ -73,7 +85,7 @@ index.html im Browser öffnen (Chrome, Edge, Firefox – alles lokal, file:// re
 `M` Auswahl · `V` Verschieben · `S` Stempel · `H` Hand · `X` Farben tauschen ·
 `[` `]` Stiftgröße · `+`/`−`/`0` Zoom/Einpassen · `Strg+Z/Y` Undo/Redo ·
 `Strg+A/D` Alles/Nichts auswählen · `Strg+C/X/V` Kopieren/Ausschneiden/Einfügen ·
-`Entf` Auswahl löschen · `Enter` Animation · `Esc` Abbrechen · `?` Hilfe
+`Entf` Auswahl löschen · `Enter` Animation · `F` Vollbild · `Esc` Abbrechen · `?` Hilfe
 
 Die vollständige Hilfe ist in der App über den `?`-Button erreichbar.
 
@@ -86,5 +98,6 @@ NODE_PATH=$(npm root -g) node tests/e2e.js
 ```
 
 Die Suite deckt Zeichnen, Füllen, Formen, Undo/Redo, Ebenen, Frames/Playback,
-Sprite-Brush-Workflow, Snap, Hilfslinien, Auswahl/Verschieben, Projekt-Speichern/-Laden
-und PNG-Export ab (31 Checks).
+Sprite-Brush-Workflow, Snap, Hilfslinien, Auswahl/Verschieben, Projekt-Speichern/-Laden,
+PNG-Export sowie das Panel-Layout (Einklappen, Anordnen, Abdocken, Sidebar-Breite,
+1:1-Lupe, Vollbild, Layout-Persistenz) ab (43 Checks).

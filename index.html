@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PixelWerk – Pixel-Art-Editor</title>
+<title>Pixel Painter – Pixel-Art-Editor</title>
 <style>
 :root{
   --bg:#17181c; --panel:#22242b; --panel2:#2a2d36; --panel3:#31353f;
@@ -63,8 +63,15 @@ hr.vsep{border:none; border-left:1px solid var(--border); height:22px; margin:0 
 
 /* ---------- Main area ---------- */
 #main{
-  display:grid; grid-template-columns:56px 1fr 300px; overflow:hidden; min-height:0;
+  --sbw:300px;
+  display:grid; grid-template-columns:56px minmax(0,1fr) 5px var(--sbw);
+  overflow:hidden; min-height:0; position:relative;
 }
+#sbSplitter{
+  cursor:col-resize; background:var(--border); width:5px; min-width:5px;
+  touch-action:none;
+}
+#sbSplitter:hover, #sbSplitter.active{background:var(--accent);}
 #toolcol{
   background:var(--panel); border-right:1px solid var(--border);
   display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0;
@@ -97,19 +104,48 @@ hr.vsep{border:none; border-left:1px solid var(--border); height:22px; margin:0 
 #viewport{position:relative; overflow:hidden; min-width:0; min-height:0;}
 #mainCanvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none;}
 
-/* ---------- Right sidebar ---------- */
+/* ---------- Right sidebar & panels ---------- */
 #sidebar{
-  background:var(--panel); border-left:1px solid var(--border);
-  overflow-y:auto; display:flex; flex-direction:column; min-height:0;
+  background:var(--panel);
+  overflow-y:auto; display:flex; flex-direction:column; min-height:0; min-width:0;
 }
-#sidebar details{border-bottom:1px solid var(--border);}
-#sidebar summary{
-  padding:7px 10px; font-weight:600; cursor:pointer; background:var(--panel2);
-  list-style:none;
+.panel{border-bottom:1px solid var(--border); background:var(--panel);}
+.phead{
+  display:flex; align-items:center; gap:6px; padding:7px 10px; font-weight:600;
+  background:var(--panel2); cursor:grab; user-select:none; touch-action:none;
 }
-#sidebar summary::before{content:"▾ "; color:var(--muted);}
-#sidebar details:not([open]) summary::before{content:"▸ ";}
-.panelbody{padding:8px 10px; display:flex; flex-direction:column; gap:8px;}
+.phead:active{cursor:grabbing;}
+.phead .pcaret{color:var(--muted); font-size:10px; display:inline-block; transition:transform .12s;}
+.panel.collapsed .pcaret{transform:rotate(-90deg);}
+.panel.collapsed .pbody{display:none;}
+.phead .ptitle{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.phead button{padding:0 6px; font-size:12px; line-height:18px;}
+.panel.dragging{opacity:.5;}
+.pbody{padding:8px 10px; display:flex; flex-direction:column; gap:8px;}
+
+/* Schwebende (abgedockte) Panels */
+.floatwin{
+  position:absolute; z-index:40; min-width:230px; min-height:80px;
+  max-width:calc(100% - 20px); max-height:calc(100% - 20px);
+  background:var(--panel); border:1px solid var(--accent-dim); border-radius:8px;
+  box-shadow:0 10px 34px rgba(0,0,0,.55);
+  display:flex; flex-direction:column; resize:both; overflow:hidden;
+}
+.floatwin .panel{border-bottom:none; display:flex; flex-direction:column; flex:1; min-height:0;}
+.floatwin .phead{border-radius:8px 8px 0 0;}
+.floatwin .pbody{overflow:auto; flex:1; min-height:0;}
+
+/* 1:1-Lupe für Spritesheet-Kacheln */
+#magnifier{
+  position:fixed; z-index:120; pointer-events:none;
+  background:var(--panel); border:1px solid var(--accent); border-radius:6px;
+  padding:6px; box-shadow:0 8px 28px rgba(0,0,0,.65);
+}
+#magnifier canvas{
+  display:block; image-rendering:pixelated;
+  background:repeating-conic-gradient(#555 0% 25%, #777 0% 50%) 0 0/12px 12px;
+}
+#magnifier .magcap{font-size:11px; color:var(--muted); margin-top:4px; text-align:center; white-space:nowrap;}
 .btnrow{display:flex; gap:4px; flex-wrap:wrap;}
 .btnrow button{padding:3px 7px; font-size:12px;}
 
@@ -206,10 +242,10 @@ dialog kbd{
 
 <!-- ======================= TOPBAR ======================= -->
 <div id="topbar">
-  <span id="logo">Pixel<span>Werk</span></span>
+  <span id="logo">Pixel <span>Painter</span></span>
   <div class="tb-group">
     <button id="btnNew" title="Neues Dokument (Vorlagen oder eigene Größe)">Neu</button>
-    <button id="btnOpenProj" title="Projekt (.pixelwerk.json) öffnen – mit allen Ebenen">Öffnen</button>
+    <button id="btnOpenProj" title="Projekt (.pixelpainter.json) öffnen – mit allen Ebenen">Öffnen</button>
     <button id="btnSaveProj" title="Projekt mit Ebenen, Frames &amp; Brushes speichern (JSON)">Speichern</button>
     <button id="btnImport" title="PNG importieren: als Brush-Spritesheet, Ebene oder neues Dokument">Import</button>
     <button id="btnExportPng" title="Als PNG exportieren (Frame oder Spritesheet)">Export PNG</button>
@@ -244,6 +280,7 @@ dialog kbd{
     <button id="btnZoomFit" title="Ansicht einpassen (0)">Einpassen</button>
   </div>
   <hr class="vsep">
+  <button id="btnFullscreen" title="Vollbildmodus (F)">⛶</button>
   <button id="btnHelp" title="Hilfe &amp; Tastaturkürzel (?)">?</button>
 </div>
 
@@ -302,10 +339,15 @@ dialog kbd{
     </div>
   </div>
 
+  <div id="sbSplitter" title="Ziehen: Breite der Sidebar ändern"></div>
+
   <div id="sidebar">
-    <details open>
-      <summary>Farben</summary>
-      <div class="panelbody">
+    <div class="panel" data-panel="colors">
+      <div class="phead" title="Klick: ein-/ausklappen · Ziehen: neu anordnen oder aus der Sidebar abdocken">
+        <span class="pcaret">▾</span><span class="ptitle">Farben</span>
+        <button class="pfloat" title="Panel abdocken">⇱</button>
+      </div>
+      <div class="pbody">
         <div id="colorInputs">
           <input type="color" id="inpColorNative" value="#000000" title="Farbwähler">
           <input type="text" id="inpHex" value="#000000" maxlength="7" title="Hex-Wert">
@@ -324,11 +366,14 @@ dialog kbd{
         </div>
         <div id="palGrid" title="Klick: Vordergrund · Rechtsklick: Hintergrund · Alt+Klick: entfernen"></div>
       </div>
-    </details>
+    </div>
 
-    <details open>
-      <summary>Ebenen</summary>
-      <div class="panelbody">
+    <div class="panel" data-panel="layers">
+      <div class="phead" title="Klick: ein-/ausklappen · Ziehen: neu anordnen oder aus der Sidebar abdocken">
+        <span class="pcaret">▾</span><span class="ptitle">Ebenen</span>
+        <button class="pfloat" title="Panel abdocken">⇱</button>
+      </div>
+      <div class="pbody">
         <div class="btnrow">
           <button id="btnLayerAdd" title="Neue Ebene über der aktiven">+ Neu</button>
           <button id="btnLayerDup" title="Ebene duplizieren">Dupl.</button>
@@ -340,13 +385,17 @@ dialog kbd{
         </div>
         <div id="layerList"></div>
       </div>
-    </details>
+    </div>
 
-    <details open>
-      <summary>Brushes / Spritesheets</summary>
-      <div class="panelbody">
+    <div class="panel" data-panel="brushes">
+      <div class="phead" title="Klick: ein-/ausklappen · Ziehen: neu anordnen oder aus der Sidebar abdocken">
+        <span class="pcaret">▾</span><span class="ptitle">Brushes / Spritesheets</span>
+        <button class="pfloat" title="Panel abdocken">⇱</button>
+      </div>
+      <div class="pbody">
         <div class="btnrow">
           <button id="btnAssetAdd" title="Spritesheet(s) laden – z. B. RPG-Maker-Tilesets oder eigene Sprites">+ Spritesheet laden</button>
+          <button id="tgTileZoom" title="Lupe: Kacheln beim Überfahren in Originalgröße (1:1) anzeigen">🔍 1:1</button>
         </div>
         <div style="color:var(--muted); font-size:12px;">
           Kachel anklicken oder Bereich aufziehen → wird zum Stempel-Brush.
@@ -355,7 +404,7 @@ dialog kbd{
         </div>
         <div id="assetList"></div>
       </div>
-    </details>
+    </div>
   </div>
 </div>
 
@@ -506,7 +555,7 @@ dialog kbd{
 </dialog>
 
 <dialog id="dlgHelp">
-  <div class="dhead">PixelWerk – Hilfe &amp; Tastaturkürzel</div>
+  <div class="dhead">Pixel Painter – Hilfe &amp; Tastaturkürzel</div>
   <div class="dbody">
     <h4>Werkzeuge</h4>
     <table>
@@ -528,8 +577,15 @@ dialog kbd{
       <tr><td>Rechtsklick beim Malen</td><td>Mit Hintergrundfarbe zeichnen</td></tr>
       <tr><td><kbd>Umschalt</kbd> bei Linie/Rechteck/Ellipse</td><td>45° / Quadrat / Kreis</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>Animation abspielen/anhalten</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Vollbildmodus an/aus</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Auswahl/Aktion abbrechen</td></tr>
     </table>
+    <h4>Panels &amp; Ansicht</h4>
+    <p>Panel-Titel anklicken = ein-/ausklappen. Am Titel ziehen = Reihenfolge in der Sidebar ändern;
+    nach links aus der Sidebar herausziehen (oder ⇱) = Panel als frei bewegliches, größenveränderbares
+    Fenster abdocken, mit ⇲ wieder andocken. Die Sidebar-Breite lässt sich am linken Rand der Sidebar
+    ziehen. „🔍 1:1“ im Brush-Panel zeigt Kacheln beim Überfahren in Originalgröße (Lupe).
+    ⛶ bzw. <kbd>F</kbd> schaltet den Vollbildmodus. Das Layout wird automatisch gemerkt.</p>
     <h4>Sprite-Brushes (RPG Maker &amp; eigene Sprites)</h4>
     <p>Über <b>Import</b> oder das Brush-Panel ein Spritesheet laden (PNG). Im Panel die Rastergröße
     einstellen – z. B. 48 px für RPG Maker MZ/MV oder 32 px für VX/Ace. Eine Kachel anklicken oder
@@ -550,10 +606,12 @@ dialog kbd{
   </div>
 </dialog>
 
+<div id="magnifier" class="hidden"><canvas></canvas><div class="magcap"></div></div>
+
 <script>
 'use strict';
 /* ============================================================
-   PixelWerk – Pixel-Art-Editor in einer einzigen HTML-Datei.
+   Pixel Painter – Pixel-Art-Editor in einer einzigen HTML-Datei.
    Läuft komplett lokal (file://), kein Build, keine Abhängigkeiten.
    ============================================================ */
 
@@ -1837,6 +1895,7 @@ document.addEventListener('keydown', ev => {
     case '+': zoomStep(1); break;
     case '-': zoomStep(-1); break;
     case '0': fitView(); break;
+    case 'f': case 'F': toggleFullscreen(); break;
     case '?': $('#dlgHelp').showModal(); break;
     case 'Enter': togglePlay(); break;
     case 'Delete': case 'Backspace': deleteSelection(); ev.preventDefault(); break;
@@ -2421,12 +2480,16 @@ function wireAssetView(a, cv) {
   cv.addEventListener('contextmenu', ev => ev.preventDefault());
   cv.addEventListener('pointerdown', ev => {
     ev.preventDefault();
+    hideMagnifier();
     cv.setPointerCapture(ev.pointerId);
     drag = imgPos(ev);
     updateSel(drag, drag);
   });
   cv.addEventListener('pointermove', ev => {
-    if (!drag) return;
+    if (!drag) {
+      if (uiState.tileZoom) showMagnifier(a, imgPos(ev), ev);
+      return;
+    }
     updateSel(drag, imgPos(ev));
   });
   cv.addEventListener('pointerup', ev => {
@@ -2436,6 +2499,7 @@ function wireAssetView(a, cv) {
     const s = a.sel;
     setStampFromAsset(a, s.x, s.y, s.w, s.h);
   });
+  cv.addEventListener('pointerleave', () => hideMagnifier());
 }
 
 /* ---------------- Leinwandgröße ändern ---------------- */
@@ -2475,7 +2539,7 @@ function resizeDoc(nw, nh, anchor, rescale) {
 /* ---------------- Projekt speichern / laden ---------------- */
 function serializeProject() {
   return {
-    app: 'pixelwerk', version: 1,
+    app: 'pixelpainter', version: 1,
     name: doc.name, width: doc.w, height: doc.h,
     tileW: doc.tileW, tileH: doc.tileH,
     frames: doc.frames.map(f => ({ duration: f.duration })),
@@ -2498,13 +2562,14 @@ function serializeProject() {
 }
 function saveProject() {
   const json = JSON.stringify(serializeProject());
-  downloadBlob(new Blob([json], { type: 'application/json' }), (doc.name || 'pixelart') + '.pixelwerk.json');
+  downloadBlob(new Blob([json], { type: 'application/json' }), (doc.name || 'pixelart') + '.pixelpainter.json');
   state.dirtyDoc = false;
   hint('Projekt gespeichert (Download). Enthält Ebenen, Frames, Palette, Hilfslinien und Brushes.');
 }
 async function loadProjectData(data) {
-  if (!data || data.app !== 'pixelwerk' || !Array.isArray(data.layers)) {
-    throw new Error('Das ist keine PixelWerk-Projektdatei.');
+  // 'pixelwerk' = Kennung sehr früher Projektdateien, bleibt lesbar
+  if (!data || !['pixelpainter', 'pixelwerk'].includes(data.app) || !Array.isArray(data.layers)) {
+    throw new Error('Das ist keine Pixel Painter-Projektdatei.');
   }
   const w = data.width, h = data.height;
   const layers = [];
@@ -2861,9 +2926,309 @@ function wireUI() {
   $('#btnHelpClose').addEventListener('click', () => $('#dlgHelp').close());
 }
 
+/* ============================================================
+   Panel-Layout: Ein-/Ausklappen, Anordnen, Abdocken, Sidebar-
+   Breite, 1:1-Lupe und Vollbild. Layout wird in localStorage
+   gemerkt (unabhängig vom Projekt).
+   ============================================================ */
+const PANEL_IDS = ['colors', 'layers', 'brushes'];
+const UI_KEY = 'pixelpainter-ui-v1';
+let uiState = { order: PANEL_IDS.slice(), collapsed: {}, floating: {}, sidebarW: 300, tileZoom: false };
+
+function loadUiState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(UI_KEY) || 'null');
+    if (s && typeof s === 'object') {
+      uiState = {
+        order: Array.isArray(s.order) ? s.order.filter(id => PANEL_IDS.includes(id)) : [],
+        collapsed: s.collapsed || {},
+        floating: s.floating || {},
+        sidebarW: s.sidebarW || 300,
+        tileZoom: !!s.tileZoom,
+      };
+    }
+  } catch (e) { /* localStorage nicht verfügbar – Standardlayout */ }
+  for (const id of PANEL_IDS) if (!uiState.order.includes(id)) uiState.order.push(id);
+}
+let uiSaveTimer = null;
+function saveUiState() {
+  clearTimeout(uiSaveTimer);
+  uiSaveTimer = setTimeout(() => {
+    try { localStorage.setItem(UI_KEY, JSON.stringify(uiState)); } catch (e) { /* egal */ }
+  }, 150);
+}
+
+const panelEl = id => document.querySelector(`.panel[data-panel="${id}"]`);
+
+function setSidebarWidth(w) {
+  uiState.sidebarW = clamp(Math.round(w), 200, 640);
+  $('#main').style.setProperty('--sbw', uiState.sidebarW + 'px');
+}
+
+function updateFloatBtn(p) {
+  const floating = !!p.closest('.floatwin');
+  const btn = p.querySelector('.pfloat');
+  btn.textContent = floating ? '⇲' : '⇱';
+  btn.title = floating ? 'Panel wieder andocken' : 'Panel abdocken';
+}
+
+function insertDocked(p) {
+  const id = p.dataset.panel;
+  for (const nid of uiState.order.slice(uiState.order.indexOf(id) + 1)) {
+    const np = panelEl(nid);
+    if (np && np.parentElement === $('#sidebar')) { $('#sidebar').insertBefore(p, np); return; }
+  }
+  $('#sidebar').append(p);
+}
+
+const floatRO = new ResizeObserver(entries => {
+  for (const en of entries) {
+    const g = uiState.floating[en.target.dataset.panel];
+    if (g) { g.w = en.target.offsetWidth; g.h = en.target.offsetHeight; saveUiState(); }
+  }
+});
+
+let floatCascade = 0;
+function floatPanel(id, geo) {
+  const p = panelEl(id);
+  if (!p || p.closest('.floatwin')) return;
+  const main = $('#main');
+  const mr = main.getBoundingClientRect();
+  const g = {
+    x: 60 + (floatCascade % 5) * 28,
+    y: 40 + (floatCascade % 5) * 28,
+    w: Math.min(340, mr.width - 40),
+    h: Math.min(400, mr.height - 40),
+    ...geo,
+  };
+  floatCascade++;
+  g.x = clamp(g.x, 0, Math.max(0, mr.width - 120));
+  g.y = clamp(g.y, 0, Math.max(0, mr.height - 60));
+  const win = h('div', { class: 'floatwin' });
+  win.dataset.panel = id;
+  win.style.left = g.x + 'px';
+  win.style.top = g.y + 'px';
+  win.style.width = g.w + 'px';
+  win.style.height = g.h + 'px';
+  main.append(win);
+  win.append(p);
+  uiState.floating[id] = g;
+  floatRO.observe(win);
+  updateFloatBtn(p);
+  saveUiState();
+  requestRender();
+}
+
+function dockPanel(id) {
+  const p = panelEl(id);
+  const win = p && p.closest('.floatwin');
+  if (!win) return;
+  delete uiState.floating[id];
+  insertDocked(p);
+  floatRO.unobserve(win);
+  win.remove();
+  updateFloatBtn(p);
+  saveUiState();
+  requestRender();
+}
+
+function togglePanelCollapse(p) {
+  p.classList.toggle('collapsed');
+  uiState.collapsed[p.dataset.panel] = p.classList.contains('collapsed');
+  saveUiState();
+}
+
+function startPanelDrag(p, ev) {
+  const id = p.dataset.panel;
+  // Kein Pointer-Capture: Beim Umsortieren wird das Panel neu in den DOM
+  // gehängt, was eine Capture sofort beenden würde. Darum Drag-Session
+  // über document-Listener.
+  const startX = ev.clientX, startY = ev.clientY;
+  let mode = null; // null = Klick (Collapse), 'reorder', 'float'
+  let offX = 0, offY = 0;
+  const startedFloating = !!p.closest('.floatwin');
+  const onMove = e => {
+    if (!mode) {
+      if (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4) return;
+      if (startedFloating) {
+        mode = 'float';
+        const r = p.closest('.floatwin').getBoundingClientRect();
+        offX = startX - r.left;
+        offY = startY - r.top;
+      } else {
+        mode = 'reorder';
+        p.classList.add('dragging');
+      }
+    }
+    if (mode === 'float') {
+      const win = p.closest('.floatwin');
+      if (!win) return;
+      const mr = $('#main').getBoundingClientRect();
+      const nx = clamp(e.clientX - mr.left - offX, 0, Math.max(0, mr.width - 100));
+      const ny = clamp(e.clientY - mr.top - offY, 0, Math.max(0, mr.height - 40));
+      win.style.left = nx + 'px';
+      win.style.top = ny + 'px';
+      const g = uiState.floating[id];
+      if (g) { g.x = nx; g.y = ny; }
+      return;
+    }
+    // Innerhalb der Sidebar neu anordnen …
+    const sb = $('#sidebar').getBoundingClientRect();
+    if (e.clientX < sb.left - 48) {
+      // … oder nach links herausziehen -> abdocken und als Fenster weiterziehen
+      p.classList.remove('dragging');
+      const mr = $('#main').getBoundingClientRect();
+      floatPanel(id, {
+        x: clamp(e.clientX - mr.left - 150, 0, Math.max(0, mr.width - 200)),
+        y: clamp(e.clientY - mr.top - 14, 0, Math.max(0, mr.height - 100)),
+        w: Math.min(Math.max(280, uiState.sidebarW), mr.width - 40),
+        h: 380,
+      });
+      mode = 'float';
+      offX = 150; offY = 14;
+      return;
+    }
+    const sibs = [...$('#sidebar').children].filter(el => el !== p && el.classList.contains('panel'));
+    let target = null;
+    for (const sib of sibs) {
+      const r = sib.getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) { target = sib; break; }
+    }
+    // DOM nur anfassen, wenn sich die Position wirklich ändert
+    if (target ? p.nextElementSibling !== target : $('#sidebar').lastElementChild !== p) {
+      if (target) $('#sidebar').insertBefore(p, target);
+      else $('#sidebar').append(p);
+    }
+  };
+  const onUp = () => {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    p.classList.remove('dragging');
+    if (!mode) { togglePanelCollapse(p); return; }
+    if (mode === 'reorder') {
+      const docked = [...$('#sidebar').querySelectorAll('.panel')].map(x => x.dataset.panel);
+      uiState.order = docked.concat(uiState.order.filter(x => !docked.includes(x)));
+    }
+    saveUiState();
+  };
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+}
+
+function wirePanels() {
+  for (const id of PANEL_IDS) {
+    const p = panelEl(id);
+    p.querySelector('.pfloat').addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (p.closest('.floatwin')) dockPanel(id); else floatPanel(id);
+    });
+    p.querySelector('.phead').addEventListener('pointerdown', ev => {
+      if (ev.button !== 0 || ev.target.closest('button')) return;
+      ev.preventDefault();
+      startPanelDrag(p, ev);
+    });
+  }
+  const sp = $('#sbSplitter');
+  sp.addEventListener('pointerdown', ev => {
+    ev.preventDefault();
+    sp.setPointerCapture(ev.pointerId);
+    sp.classList.add('active');
+    const mr = $('#main').getBoundingClientRect();
+    const onMove = e => { setSidebarWidth(mr.right - e.clientX); requestRender(); };
+    const onUp = () => {
+      sp.removeEventListener('pointermove', onMove);
+      sp.removeEventListener('pointerup', onUp);
+      sp.classList.remove('active');
+      saveUiState();
+    };
+    sp.addEventListener('pointermove', onMove);
+    sp.addEventListener('pointerup', onUp);
+  });
+  $('#tgTileZoom').addEventListener('click', () => {
+    uiState.tileZoom = !uiState.tileZoom;
+    $('#tgTileZoom').classList.toggle('toggled', uiState.tileZoom);
+    if (!uiState.tileZoom) hideMagnifier();
+    saveUiState();
+  });
+  $('#btnFullscreen').addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', () => {
+    $('#btnFullscreen').classList.toggle('toggled', !!document.fullscreenElement);
+    requestRender();
+  });
+}
+
+function applyPanelLayout() {
+  setSidebarWidth(uiState.sidebarW);
+  for (const id of uiState.order) {
+    const p = panelEl(id);
+    if (p) $('#sidebar').append(p);
+  }
+  for (const id of PANEL_IDS) {
+    const p = panelEl(id);
+    p.classList.toggle('collapsed', !!uiState.collapsed[id]);
+    updateFloatBtn(p);
+  }
+  for (const id of PANEL_IDS) {
+    if (uiState.floating[id]) {
+      const g = uiState.floating[id];
+      delete uiState.floating[id];
+      floatPanel(id, g);
+    }
+  }
+  $('#tgTileZoom').classList.toggle('toggled', uiState.tileZoom);
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => hint('⚠ Vollbild ist in diesem Browser nicht verfügbar.'));
+}
+
+/* ---------------- 1:1-Lupe für Kacheln ---------------- */
+function showMagnifier(a, p, ev) {
+  const box = $('#magnifier');
+  const mc = box.querySelector('canvas');
+  let rx, ry, rw, rh, cap;
+  if (a.mode === 'grid') {
+    const t = assetTileAt(a, p.x, p.y);
+    rx = a.offX + t.tx * (a.tileW + a.spacing);
+    ry = a.offY + t.ty * (a.tileH + a.spacing);
+    rw = a.tileW; rh = a.tileH;
+    cap = `Kachel ${t.tx},${t.ty} · ${rw}×${rh} px · 100 %`;
+  } else {
+    rw = Math.min(a.tileW, a.img.width);
+    rh = Math.min(a.tileH, a.img.height);
+    rx = Math.round(p.x - rw / 2);
+    ry = Math.round(p.y - rh / 2);
+    cap = `${rw}×${rh} px · 100 %`;
+  }
+  rx = clamp(rx, 0, Math.max(0, a.img.width - 1));
+  ry = clamp(ry, 0, Math.max(0, a.img.height - 1));
+  rw = Math.max(1, Math.min(rw, a.img.width - rx));
+  rh = Math.max(1, Math.min(rh, a.img.height - ry));
+  mc.width = rw; mc.height = rh;
+  mc.style.width = rw + 'px'; mc.style.height = rh + 'px';
+  ctxOf(mc).drawImage(a.img, rx, ry, rw, rh, 0, 0, rw, rh);
+  box.querySelector('.magcap').textContent = cap;
+  box.classList.remove('hidden');
+  let x = ev.clientX + 18, y = ev.clientY + 18;
+  const bw = box.offsetWidth, bh = box.offsetHeight;
+  if (x + bw > window.innerWidth - 8) x = ev.clientX - bw - 18;
+  if (y + bh > window.innerHeight - 8) y = ev.clientY - bh - 18;
+  box.style.left = Math.max(4, x) + 'px';
+  box.style.top = Math.max(4, y) + 'px';
+}
+function hideMagnifier() {
+  $('#magnifier').classList.add('hidden');
+}
+
 /* ---------------- Start ---------------- */
 function init() {
+  loadUiState();
   wireUI();
+  wirePanels();
+  applyPanelLayout();
   createDoc(48, 48, 48, 48, 'pixelart');
   setTool('pencil');
   updateColorUI();
@@ -2889,6 +3254,8 @@ window.__pw = {
   },
   setTool, createDoc, saveProject,
   serializeProject, loadProjectData,
+  getUiState: () => uiState,
+  floatPanel, dockPanel,
 };
 </script>
 </body>
